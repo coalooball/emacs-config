@@ -26,6 +26,12 @@
               tab-width 4)
 (setq tab-always-indent 'complete)
 
+;; Window resizing.
+(global-set-key (kbd "C-M-<left>")  #'shrink-window-horizontally)
+(global-set-key (kbd "C-M-<right>") #'enlarge-window-horizontally)
+(global-set-key (kbd "C-M-<down>")  #'shrink-window)
+(global-set-key (kbd "C-M-<up>")    #'enlarge-window)
+
 (use-package exec-path-from-shell
   :if (memq system-type '(darwin gnu/linux))
   :config
@@ -121,6 +127,51 @@
 (use-package magit
   :bind
   ("C-x g" . magit-status))
+
+;; Show Git changes in the fringe, similar to VS Code's gutter markers.
+(use-package diff-hl
+  :hook
+  (magit-post-refresh . diff-hl-magit-post-refresh)
+  :init
+  (global-diff-hl-mode)
+  :config
+  (diff-hl-flydiff-mode)
+  (unless (display-graphic-p)
+    (diff-hl-margin-mode)))
+
+;; Notes, tasks, and agenda.
+(use-package org
+  :ensure nil
+  :demand t
+  :bind
+  (("C-c a" . org-agenda)
+   ("C-c c" . org-capture)
+   ("C-c l" . org-store-link))
+  :hook
+  ((org-mode . visual-line-mode)
+   (org-mode . org-indent-mode))
+  :custom
+  (org-directory (expand-file-name "org" user-emacs-directory))
+  (org-default-notes-file (expand-file-name "inbox.org" org-directory))
+  (org-agenda-files (list org-directory))
+  (org-log-done 'time)
+  (org-startup-folded 'content)
+  (org-startup-indented t)
+  (org-hide-emphasis-markers t)
+  (org-pretty-entities t)
+  (org-src-fontify-natively t)
+  (org-src-tab-acts-natively t)
+  (org-todo-keywords
+   '((sequence "TODO(t)" "NEXT(n)" "WAIT(w@/!)" "|" "DONE(d!)" "CANCELLED(c@)")))
+  (org-capture-templates
+   `(("t" "Task" entry
+      (file+headline ,(expand-file-name "inbox.org" org-directory) "Tasks")
+      "* TODO %?\n  %U\n  %a")
+     ("n" "Note" entry
+      (file+headline ,(expand-file-name "notes.org" org-directory) "Notes")
+      "* %?\n  %U\n  %a")))
+  :config
+  (make-directory org-directory t))
 
 (with-eval-after-load 'eat
   (setq eat-minimum-latency 0.02

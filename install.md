@@ -66,6 +66,7 @@ emacs --init-directory=/Users/mawangdan/code/emacs-config
 - `treesit-auto`
 - `apheleia`
 - `magit`
+- `diff-hl`
 
 Eglot 已包含在 Emacs 30 中，不需要单独安装。
 
@@ -216,7 +217,35 @@ M-x magit-status
 | `C-x b` | 切换 buffer |
 | `C-x g` | 打开 Magit |
 
-## 7. Eat 的 DEL 键异常
+## 7. 使用 Org mode
+
+Org mode 已包含在 Emacs 中，本配置不需要额外安装包。Org 文件默认保存在
+`~/.emacs.d/org/`；如果使用 `--init-directory` 启动本仓库，则保存在仓库的
+`org/` 目录中。第一次启动时会自动创建该目录。
+
+常用入口：
+
+| 快捷键 | 功能 |
+| --- | --- |
+| `C-c c t` | 快速记录任务到 `inbox.org` |
+| `C-c c n` | 快速记录笔记到 `notes.org` |
+| `C-c a a` | 查看 Agenda |
+| `C-c l` | 保存当前位置的 Org 链接 |
+| `C-c C-t` | 在 Org 标题上切换任务状态 |
+| `C-c C-s` | 为任务安排日期 |
+| `C-c C-d` | 为任务设置截止日期 |
+
+例如在 `inbox.org` 中记录一个带截止日期的任务：
+
+```org
+* TODO 完成项目说明
+  DEADLINE: <2026-08-05 Wed>
+```
+
+`org-agenda-files` 默认包含整个 Org 目录，因此该目录下的所有 `.org` 文件都会
+进入 Agenda。任务完成时会自动记录完成时间。
+
+## 8. Eat 的 DEL 键异常
 
 ### 现象
 
