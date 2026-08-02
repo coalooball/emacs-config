@@ -15,6 +15,32 @@
 
 (load-theme 'modus-vivendi t)
 
+;; Fonts.
+(defun cyan/first-available-font (fonts)
+  "Return the first available font family from FONTS."
+  (catch 'found
+    (dolist (font fonts)
+      (when (member font (font-family-list))
+        (throw 'found font)))))
+
+(defun cyan/setup-fonts (&optional frame)
+  "Set a CJK-friendly monospace font for FRAME."
+  (when frame
+    (select-frame frame))
+  (when (display-graphic-p)
+    (when-let ((font (cyan/first-available-font
+                      '("Sarasa Mono SC"
+                        "Sarasa Term SC"
+                        "Noto Sans Mono CJK SC"
+                        "Source Han Mono SC"
+                        "Menlo"))))
+      (set-face-attribute 'default nil :family font :height 140)
+      (set-face-attribute 'fixed-pitch nil :family font :height 'unspecified)
+      (set-fontset-font t 'han (font-spec :family font) nil 'prepend))))
+
+(cyan/setup-fonts)
+(add-hook 'after-make-frame-functions #'cyan/setup-fonts)
+
 ;; Basic editing.
 (electric-pair-mode 1)
 (delete-selection-mode 1)
@@ -282,6 +308,7 @@
       (file+headline ,(expand-file-name "notes.org" org-directory) "Notes")
       "* %?\n  %U\n  %a")))
   :config
+  (set-face-attribute 'org-table nil :inherit 'fixed-pitch)
   (make-directory org-directory t))
 
 (with-eval-after-load 'eat

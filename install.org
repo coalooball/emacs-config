@@ -27,7 +27,12 @@ macOS：
 #+begin_src sh
 xcode-select --install
 brew install ripgrep uv clang-format
+brew install --cask font-sarasa-gothic
 #+end_src
+
+其中 =font-sarasa-gothic= 提供 =Sarasa Mono SC= 等中文等宽字体，用于改善
+Org 表格中中文和英文混排时的显示对齐。安装后重启 GUI Emacs，或重新打开
+Emacs frame。
 
 Debian/Ubuntu：
 
