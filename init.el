@@ -5,9 +5,22 @@
         ("nongnu" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/nongnu/")
         ("melpa" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/melpa/")))
 
-(package-initialize)
+(when (boundp 'native-comp-async-report-warnings-errors)
+  (setq native-comp-async-report-warnings-errors nil))
 
-(unless package-archive-contents
+(package-initialize)
+(require 'seq)
+
+(defvar cyan/ensure-packages
+  '(embark embark-consult consult-eglot eldoc-box treemacs perspective)
+  "Packages that should trigger an archive refresh before first install.")
+
+;; Refresh metadata before installing new packages.  Mirror package tarballs can
+;; disappear while the local archive cache still points to the old versions.
+(when (or (null package-archive-contents)
+          (seq-some (lambda (package)
+                      (not (package-installed-p package)))
+                    cyan/ensure-packages))
   (package-refresh-contents))
 
 (require 'use-package)
@@ -136,6 +149,17 @@
   :init
   (which-key-mode))
 
+;; Context actions for minibuffer candidates, symbols, files, and buffers.
+(use-package embark
+  :bind
+  (("C-." . embark-act)
+   ("C-;" . embark-dwim)
+   ("C-h B" . embark-bindings))
+  :custom
+  (prefix-help-command #'embark-prefix-help-command)
+  :config
+  (require 'embark-consult nil t))
+
 ;; Search and navigation.
 (use-package consult
   :bind
@@ -143,6 +167,12 @@
    ("C-x b" . consult-buffer)
    ("M-s r" . consult-ripgrep)
    ("M-g i" . consult-imenu)))
+
+(use-package embark-consult
+  :ensure t
+  :after (embark consult)
+  :hook
+  (embark-collect-mode . consult-preview-at-point-mode))
 
 ;; Completion inside source buffers.
 (use-package corfu
@@ -163,8 +193,25 @@
   :custom
   (treesit-auto-langs
    '(javascript typescript tsx python rust c cpp))
-  (treesit-auto-install 'prompt)
+  (treesit-auto-install nil)
   :config
+  (defun cyan/treesit-install-grammars-async ()
+    "Install missing Tree-sitter grammars in a separate Emacs process."
+    (interactive)
+    (let* ((emacs (shell-quote-argument
+                   (expand-file-name invocation-name invocation-directory)))
+           (init-file (shell-quote-argument (expand-file-name user-init-file)))
+           (install-form
+            (shell-quote-argument
+             "(progn
+                (require 'treesit-auto)
+                (setq treesit-auto-install t)
+                (treesit-auto-install-all))")))
+      (async-shell-command
+       (format "%s --batch --load %s --eval %s"
+               emacs init-file install-form)
+       "*Tree-sitter grammar install*")))
+
   (treesit-auto-add-to-auto-mode-alist 'all)
   (global-treesit-auto-mode))
 
@@ -190,6 +237,21 @@
                   c++-ts-mode-hook))
     (add-hook hook #'eglot-ensure)))
 
+(use-package consult-eglot
+  :after (consult eglot)
+  :bind
+  ("M-g s" . consult-eglot-symbols))
+
+(use-package eldoc-box
+  :after eglot
+  :hook
+  (eglot-managed-mode . cyan/enable-eldoc-box)
+  :config
+  (defun cyan/enable-eldoc-box ()
+    "Show Eglot documentation in a popup when child frames are available."
+    (when (display-graphic-p)
+      (eldoc-box-hover-mode 1))))
+
 ;; Format source files after saving without moving point unnecessarily.
 (use-package apheleia
   :config
@@ -211,6 +273,33 @@
 (use-package magit
   :bind
   ("C-x g" . magit-status))
+
+;; Project tree sidebar.
+(use-package treemacs
+  :bind
+  (("C-c t t" . treemacs)
+   ("C-c t f" . treemacs-find-file)
+   ("C-c t p" . treemacs-add-project-to-workspace)
+   ("C-c t s" . treemacs-select-window))
+  :custom
+  (treemacs-position 'right)
+  (treemacs-width 32)
+  (treemacs-width-is-initially-locked nil)
+  (treemacs-follow-after-init t)
+  (treemacs-is-never-other-window t))
+
+;; Isolated workspaces with separate buffer lists.
+(use-package perspective
+  :bind
+  (("C-c w s" . persp-switch)
+   ("C-c w k" . persp-kill)
+   ("C-c w n" . persp-next)
+   ("C-c w p" . persp-prev)
+   ("C-c w b" . persp-switch-to-buffer))
+  :custom
+  (persp-mode-prefix-key (kbd "C-c w"))
+  :init
+  (persp-mode))
 
 ;; Show Git changes in the fringe, similar to VS Code's gutter markers.
 (use-package diff-hl

@@ -1,5 +1,58 @@
 
 
+* buffer
+
+| 快捷键  | 说明              |
+|---------+-------------------|
+| C-x x r | 重命名当前 buffer |
+
+* project.el
+
+| 快捷键  | 说明             |
+|---------+------------------|
+| C-x p p | 切换项目         |
+| C-x p f | 查找项目文件     |
+| C-x p b | 切换项目 buffer  |
+| C-x p s | 在项目中搜索     |
+| C-x p g | 在项目中执行 grep |
+| C-x p d | 打开项目根目录   |
+| C-x p k | 关闭项目 buffers |
+| C-x p ! | 在项目中执行命令 |
+| C-x p & | 在项目中异步执行命令 |
+
+* embark
+
+| 快捷键 | 说明                       |
+|--------+----------------------------|
+| C-.    | 对当前对象执行 Embark 动作 |
+| C-;    | 执行 Embark 推荐动作       |
+| C-h B  | 显示当前上下文可用动作     |
+
+* consult-eglot
+
+| 快捷键 | 说明                       |
+|--------+----------------------------|
+| M-g s  | 搜索 LSP workspace symbols |
+
+* treemacs
+
+| 快捷键  | 说明                         |
+|---------+------------------------------|
+| C-c t t | 打开/切换 Treemacs 项目树     |
+| C-c t f | 在 Treemacs 中定位当前文件    |
+| C-c t p | 添加目录到 Treemacs workspace |
+| C-c t s | 跳转到 Treemacs 窗口          |
+
+* perspective
+
+| 快捷键  | 说明                         |
+|---------+------------------------------|
+| C-c w s | 切换/创建 workspace           |
+| C-c w k | 删除当前 workspace            |
+| C-c w n | 切换到下一个 workspace        |
+| C-c w p | 切换到上一个 workspace        |
+| C-c w b | 在当前 workspace 中切换 buffer |
+
 * vterm
 
 | 快捷键  | 说明                      |

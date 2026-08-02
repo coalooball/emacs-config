@@ -177,7 +177,14 @@ clangd 会自动寻找 =build/compile_commands.json=。
 - Rust
 - C、C++
 
-首次打开对应源文件时，=treesit-auto= 会询问是否下载并编译 grammar，输入 =y=。安装完成后，可以通过当前 major mode 确认是否生效，例如：
+不要在首次打开源文件时下载 grammar；网络很差时，同步下载会卡住 Emacs。
+需要安装或补齐 grammar 时，手动执行：
+
+#+begin_src text
+M-x cyan/treesit-install-grammars-async
+#+end_src
+
+该命令会在单独的 batch Emacs 进程里下载并编译 grammar，当前 Emacs 只显示异步命令输出。安装完成后，可以通过当前 major mode 确认是否生效，例如：
 
 #+begin_src text
 M-x describe-mode
