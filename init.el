@@ -330,3 +330,11 @@
                  #'cyan/eat-adjust-process-window-size-debounced)
   (advice-add 'eat--adjust-process-window-size
               :around #'cyan/eat-adjust-process-window-size-debounced))
+
+(use-package vterm
+  :commands vterm
+  :custom
+  ;; Compile vterm-module automatically on first load instead of asking
+  ;; interactively, which fails during batch/noninteractive startup.
+  (vterm-always-compile-module t)
+  (vterm-max-scrollback 20000))
