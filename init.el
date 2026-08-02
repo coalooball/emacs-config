@@ -39,7 +39,7 @@
    ("C-<" . mc/mark-previous-like-this)
    ("C-c C-<" . mc/mark-all-like-this)))
 
-(defun my/move-line-up ()
+(defun cyan/move-line-up ()
   "Move the current line up by one line."
   (interactive)
   (let ((column (current-column)))
@@ -49,7 +49,7 @@
       (forward-line -2)
       (move-to-column column))))
 
-(defun my/move-line-down ()
+(defun cyan/move-line-down ()
   "Move the current line down by one line."
   (interactive)
   (let ((column (current-column)))
@@ -62,7 +62,7 @@
       (forward-line -1)
       (move-to-column column))))
 
-(defun my/duplicate-line-below ()
+(defun cyan/duplicate-line-below ()
   "Duplicate the current line below the current line."
   (interactive)
   (let ((column (current-column))
@@ -73,9 +73,9 @@
     (insert line)
     (move-to-column column)))
 
-(global-set-key (kbd "M-<up>") #'my/move-line-up)
-(global-set-key (kbd "M-<down>") #'my/move-line-down)
-(global-set-key (kbd "C-c D") #'my/duplicate-line-below)
+(global-set-key (kbd "M-<up>") #'cyan/move-line-up)
+(global-set-key (kbd "M-<down>") #'cyan/move-line-down)
+(global-set-key (kbd "C-c D") #'cyan/duplicate-line-below)
 
 ;; Window resizing.
 (global-set-key (kbd "C-M-<left>")  #'shrink-window-horizontally)
@@ -299,21 +299,21 @@
   ;; dragging another split can create enough resize/redisplay work to
   ;; monopolize Emacs' single Lisp thread.  Coalesce repeated resize
   ;; requests and apply only the latest size shortly after dragging.
-  (defvar my/eat-resize-timers (make-hash-table :weakness 'key))
+  (defvar cyan/eat-resize-timers (make-hash-table :weakness 'key))
 
-  (defun my/eat-adjust-process-window-size-debounced
+  (defun cyan/eat-adjust-process-window-size-debounced
       (orig-fn process windows)
     (let ((buffer (process-buffer process)))
       (if (not (buffer-live-p buffer))
           (funcall orig-fn process windows)
-        (when-let ((timer (gethash process my/eat-resize-timers)))
+        (when-let ((timer (gethash process cyan/eat-resize-timers)))
           (cancel-timer timer))
         (puthash
          process
          (run-with-timer
           0.12 nil
           (lambda (process buffer orig-fn)
-            (remhash process my/eat-resize-timers)
+            (remhash process cyan/eat-resize-timers)
             (when (and (process-live-p process)
                        (buffer-live-p buffer))
               (with-current-buffer buffer
@@ -323,8 +323,10 @@
           process
           buffer
           orig-fn)
-         my/eat-resize-timers)
+         cyan/eat-resize-timers)
         nil)))
 
+  (advice-remove 'eat--adjust-process-window-size
+                 #'cyan/eat-adjust-process-window-size-debounced)
   (advice-add 'eat--adjust-process-window-size
-              :around #'my/eat-adjust-process-window-size-debounced))
+              :around #'cyan/eat-adjust-process-window-size-debounced))
