@@ -312,14 +312,17 @@
          process
          (run-with-timer
           0.12 nil
-          (lambda ()
+          (lambda (process buffer orig-fn)
             (remhash process my/eat-resize-timers)
             (when (and (process-live-p process)
                        (buffer-live-p buffer))
               (with-current-buffer buffer
                 (funcall orig-fn
                          process
-                         (get-buffer-window-list buffer nil t))))))
+                         (get-buffer-window-list buffer nil t)))))
+          process
+          buffer
+          orig-fn)
          my/eat-resize-timers)
         nil)))
 
