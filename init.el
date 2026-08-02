@@ -174,8 +174,43 @@
   (make-directory org-directory t))
 
 (with-eval-after-load 'eat
-  (setq eat-minimum-latency 0.02
-        eat-maximum-latency 0.1
+  (setq eat-minimum-latency 0.03
+        eat-maximum-latency 0.18
+        eat-kill-buffer-on-exit t
+        eat-enable-shell-prompt-annotation nil
+        eat-term-scrollback-size 20000
         eat-very-visible-cursor-type '(box nil nil)
         eat-very-visible-vertical-bar-cursor-type '(bar nil nil)
-        eat-very-visible-horizontal-bar-cursor-type '(hbar nil nil)))
+        eat-very-visible-horizontal-bar-cursor-type '(hbar nil nil))
+
+  ;; Eat resizes the terminal and redisplays it synchronously on every
+  ;; window-size change.  When a TUI such as Codex is streaming output,
+  ;; dragging another split can create enough resize/redisplay work to
+  ;; monopolize Emacs' single Lisp thread.  Coalesce repeated resize
+  ;; requests and apply only the latest size shortly after dragging.
+  (defvar my/eat-resize-timers (make-hash-table :weakness 'key))
+
+  (defun my/eat-adjust-process-window-size-debounced
+      (orig-fn process windows)
+    (let ((buffer (process-buffer process)))
+      (if (not (buffer-live-p buffer))
+          (funcall orig-fn process windows)
+        (when-let ((timer (gethash process my/eat-resize-timers)))
+          (cancel-timer timer))
+        (puthash
+         process
+         (run-with-timer
+          0.12 nil
+          (lambda ()
+            (remhash process my/eat-resize-timers)
+            (when (and (process-live-p process)
+                       (buffer-live-p buffer))
+              (with-current-buffer buffer
+                (funcall orig-fn
+                         process
+                         (get-buffer-window-list buffer nil t))))))
+         my/eat-resize-timers)
+        nil)))
+
+  (advice-add 'eat--adjust-process-window-size
+              :around #'my/eat-adjust-process-window-size-debounced))
