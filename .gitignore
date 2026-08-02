@@ -1,0 +1,9 @@
+# Emacs lock files and auto-save files.
+.#*
+\#*\#
+
+# Emacs backup files.
+*~
+
+# Local Emacs state.
+.emacs/

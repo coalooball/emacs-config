@@ -26,6 +26,57 @@
               tab-width 4)
 (setq tab-always-indent 'complete)
 
+(require 'treesit nil t)
+
+(use-package expand-region
+  :bind
+  ("C-=" . er/expand-region))
+
+(use-package multiple-cursors
+  :bind
+  (("C-S-c C-S-c" . mc/edit-lines)
+   ("C->" . mc/mark-next-like-this)
+   ("C-<" . mc/mark-previous-like-this)
+   ("C-c C-<" . mc/mark-all-like-this)))
+
+(defun my/move-line-up ()
+  "Move the current line up by one line."
+  (interactive)
+  (let ((column (current-column)))
+    (if (= (line-beginning-position) (point-min))
+        (user-error "Already on first line")
+      (transpose-lines 1)
+      (forward-line -2)
+      (move-to-column column))))
+
+(defun my/move-line-down ()
+  "Move the current line down by one line."
+  (interactive)
+  (let ((column (current-column)))
+    (forward-line 1)
+    (if (eobp)
+        (progn
+          (forward-line -1)
+          (user-error "Already on last line"))
+      (transpose-lines 1)
+      (forward-line -1)
+      (move-to-column column))))
+
+(defun my/duplicate-line-below ()
+  "Duplicate the current line below the current line."
+  (interactive)
+  (let ((column (current-column))
+        (line (buffer-substring (line-beginning-position)
+                                (line-end-position))))
+    (end-of-line)
+    (newline)
+    (insert line)
+    (move-to-column column)))
+
+(global-set-key (kbd "M-<up>") #'my/move-line-up)
+(global-set-key (kbd "M-<down>") #'my/move-line-down)
+(global-set-key (kbd "C-c D") #'my/duplicate-line-below)
+
 ;; Window resizing.
 (global-set-key (kbd "C-M-<left>")  #'shrink-window-horizontally)
 (global-set-key (kbd "C-M-<right>") #'enlarge-window-horizontally)
@@ -51,6 +102,13 @@
 (use-package marginalia
   :init
   (marginalia-mode))
+
+(use-package which-key
+  :ensure nil
+  :custom
+  (which-key-idle-delay 0.4)
+  :init
+  (which-key-mode))
 
 ;; Search and navigation.
 (use-package consult
@@ -138,6 +196,59 @@
   (diff-hl-flydiff-mode)
   (unless (display-graphic-p)
     (diff-hl-margin-mode)))
+
+;; Database connections.
+;;
+;; Emacs' built-in sql.el talks to the standard command-line clients:
+;; psql, mysql, sqlite3, etc.  Keep passwords out of this file; use
+;; ~/.pgpass, ~/.my.cnf, environment variables, or the client's password
+;; prompt instead.
+(use-package sql
+  :ensure nil
+  :mode
+  (("\\.sql\\'" . sql-mode))
+  :bind
+  (("C-c d c" . sql-connect)
+   ("C-c d p" . sql-set-product)
+   :map sql-mode-map
+   ("C-c C-c" . sql-send-paragraph)
+   ("C-c C-b" . sql-send-buffer)
+   ("C-c C-r" . sql-send-region)
+   ("C-c C-z" . sql-show-sqli-buffer))
+  :custom
+  (sql-postgres-login-params
+   '((user :default "postgres")
+     (database :default "postgres")
+     (server :default "localhost")
+     (port :default 5432)))
+  (sql-mysql-login-params
+   '((user :default "root")
+     (database :default "")
+     (server :default "localhost")
+     (port :default 3306)))
+  (sql-connection-alist
+   '(("local-postgres"
+      (sql-product 'postgres)
+      (sql-user "postgres")
+      (sql-server "localhost")
+      (sql-port 5432)
+      (sql-database "postgres"))
+     ("local-mysql"
+      (sql-product 'mysql)
+      (sql-user "root")
+      (sql-server "localhost")
+      (sql-port 3306)
+      (sql-database ""))
+     ("local-sqlite"
+      (sql-product 'sqlite)
+      (sql-database "~/database.sqlite3"))))
+  :hook
+  (sql-interactive-mode . toggle-truncate-lines)
+  :config
+  (add-hook 'sql-mode-hook
+            (lambda ()
+              (setq-local comment-start "-- "
+                          comment-end ""))))
 
 ;; Notes, tasks, and agenda.
 (use-package org

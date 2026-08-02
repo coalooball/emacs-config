@@ -69,6 +69,8 @@ emacs --init-directory=/Users/mawangdan/code/emacs-config
 - =diff-hl=
 
 Eglot 已包含在 Emacs 30 中，不需要单独安装。
+数据库连接使用 Emacs 内置的 =sql.el=，不需要安装额外 Emacs 包，但需要安装对应
+数据库的命令行客户端。
 
 首次启动后，如果包列表尚未更新，执行：
 
@@ -217,7 +219,73 @@ M-x magit-status
 | =C-x b= | 切换 buffer |
 | =C-x g= | 打开 Magit |
 
-** 7. 使用 Org mode
+** 7. 数据库连接
+
+本配置使用 Emacs 内置的 =sql.el= 连接数据库。Emacs 负责编辑 SQL 和管理交互
+buffer，真正连接数据库的是本机命令行客户端：
+
+| 数据库 | 需要的命令 |
+|---|---|
+| PostgreSQL | =psql= |
+| MySQL/MariaDB | =mysql= |
+| SQLite | =sqlite3= |
+
+macOS 可以按需安装：
+
+#+begin_src sh
+brew install postgresql@16 mysql sqlite
+#+end_src
+
+Debian/Ubuntu 可以按需安装：
+
+#+begin_src sh
+sudo apt install postgresql-client mysql-client sqlite3
+#+end_src
+
+配置里已经提供了三个连接模板：
+
+- =local-postgres=：连接 =localhost:5432= 的 =postgres= 数据库
+- =local-mysql=：连接 =localhost:3306=
+- =local-sqlite=：打开 =~/database.sqlite3=
+
+按自己的环境修改 =init.el= 里的 =sql-connection-alist= 即可。例如 PostgreSQL：
+
+#+begin_src elisp
+("local-postgres"
+ (sql-product 'postgres)
+ (sql-user "postgres")
+ (sql-server "localhost")
+ (sql-port 5432)
+ (sql-database "postgres"))
+#+end_src
+
+不要把密码写进 =init.el=。PostgreSQL 建议用 =~/.pgpass=，MySQL/MariaDB 建议用
+=~/.my.cnf=，或者让客户端在连接时提示输入密码。
+
+常用入口：
+
+| 快捷键 / 命令 | 功能 |
+|---|---|
+| =C-c d c= | 选择 =sql-connection-alist= 中的连接 |
+| =C-c d p= | 设置当前 SQL buffer 的数据库类型 |
+| =M-x sql-postgres= | 手动连接 PostgreSQL |
+| =M-x sql-mysql= | 手动连接 MySQL/MariaDB |
+| =M-x sql-sqlite= | 手动连接 SQLite |
+| =C-c C-r= | 在 =.sql= 文件中发送选中区域 |
+| =C-c C-b= | 发送整个 SQL buffer |
+| =C-c C-c= | 发送当前段落 |
+| =C-c C-z= | 跳转到 SQL 交互 buffer |
+
+使用方式：
+
+1. 打开或新建一个 =.sql= 文件。
+2. 执行 =C-c d c=，选择一个连接，例如 =local-postgres=。
+3. 在 SQL 文件里写查询，选中语句后按 =C-c C-r= 发送到交互 buffer。
+
+也可以不先写文件，直接执行 =M-x sql-postgres=、=M-x sql-mysql= 或
+=M-x sql-sqlite= 进入交互式 SQL buffer。
+
+** 8. 使用 Org mode
 
 Org mode 已包含在 Emacs 中，本配置不需要额外安装包。Org 文件默认保存在
 =~/.emacs.d/org/=；如果使用 =--init-directory= 启动本仓库，则保存在仓库的
@@ -245,7 +313,7 @@ Org mode 已包含在 Emacs 中，本配置不需要额外安装包。Org 文件
 =org-agenda-files= 默认包含整个 Org 目录，因此该目录下的所有 =.org= 文件都会
 进入 Agenda。任务完成时会自动记录完成时间。
 
-** 8. Eat 的 DEL 键异常
+** 9. Eat 的 DEL 键异常
 
 *** 现象
 
