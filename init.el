@@ -125,7 +125,11 @@
 (use-package exec-path-from-shell
   :if (memq system-type '(darwin gnu/linux))
   :config
-  (exec-path-from-shell-initialize))
+  (exec-path-from-shell-initialize)
+  (add-to-list 'exec-path (expand-file-name "~/.local/bin"))
+  (setenv "PATH" (concat (expand-file-name "~/.local/bin")
+                         path-separator
+                         (getenv "PATH"))))
 
 ;; Minibuffer completion.
 (use-package vertico
@@ -222,15 +226,29 @@
   (eglot-autoshutdown t)
   (eglot-send-changes-idle-time 0.5)
   :config
+  (add-to-list
+   'eglot-server-programs
+   `((python-mode python-ts-mode)
+     . ,(eglot-alternatives
+         '(("basedpyright-langserver" "--stdio")
+           ("pyright-langserver" "--stdio")
+           ("pylsp")))))
+
   ;; Eglot in Emacs 30.2 does not register a JS/TS server by default.
   (add-to-list
    'eglot-server-programs
    '((js-mode js-ts-mode typescript-ts-mode tsx-ts-mode)
      . ("typescript-language-server" "--stdio")))
 
+  (add-to-list
+   'eglot-server-programs
+   '((json-mode json-ts-mode js-json-mode)
+     . ("vscode-json-language-server" "--stdio")))
+
   (dolist (hook '(js-ts-mode-hook
                   typescript-ts-mode-hook
                   tsx-ts-mode-hook
+                  python-mode-hook
                   python-ts-mode-hook
                   rust-ts-mode-hook
                   c-ts-mode-hook
@@ -246,11 +264,23 @@
   :after eglot
   :hook
   (eglot-managed-mode . cyan/enable-eldoc-box)
+  :bind
+  (:map eglot-mode-map
+        ("C-h ." . cyan/eldoc-box-help-at-point))
   :config
+  (defun cyan/eldoc-box-help-at-point ()
+    "Show documentation at point without moving focus to the child frame."
+    (interactive)
+    (when (fboundp 'eldoc-box-quit-frame)
+      (eldoc-box-quit-frame))
+    (eldoc-box-help-at-point))
+
   (defun cyan/enable-eldoc-box ()
-    "Show Eglot documentation in a popup when child frames are available."
+    "Keep Eglot documentation available on demand without auto popups."
+    (setq-local eldoc-echo-area-use-multiline-p nil)
     (when (display-graphic-p)
-      (eldoc-box-hover-mode 1))))
+      (eldoc-box-hover-at-point-mode -1)
+      (eldoc-box-hover-mode -1))))
 
 ;; Format source files after saving without moving point unnecessarily.
 (use-package apheleia
@@ -263,7 +293,8 @@
   (dolist (mode '(js-ts-mode typescript-ts-mode tsx-ts-mode))
     (setf (alist-get mode apheleia-mode-alist) 'prettier))
 
-  (setf (alist-get 'python-ts-mode apheleia-mode-alist) 'ruff
+  (setf (alist-get 'python-mode apheleia-mode-alist) 'ruff
+        (alist-get 'python-ts-mode apheleia-mode-alist) 'ruff
         (alist-get 'rust-ts-mode apheleia-mode-alist) 'rustfmt
         (alist-get 'c-ts-mode apheleia-mode-alist) 'clang-format
         (alist-get 'c++-ts-mode apheleia-mode-alist) 'clang-format)
@@ -280,6 +311,7 @@
   (("C-c t t" . treemacs)
    ("C-c t f" . treemacs-find-file)
    ("C-c t p" . treemacs-add-project-to-workspace)
+   ("C-c t d" . treemacs-remove-project-from-workspace)
    ("C-c t s" . treemacs-select-window))
   :custom
   (treemacs-position 'right)

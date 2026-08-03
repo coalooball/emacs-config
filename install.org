@@ -102,7 +102,7 @@ M-x package-install RET eat RET
 先安装 Node.js 和 npm，再执行：
 
 #+begin_src sh
-npm install -g typescript-language-server typescript pyright prettier
+npm install -g typescript-language-server typescript prettier
 #+end_src
 
 其中：
@@ -110,7 +110,6 @@ npm install -g typescript-language-server typescript pyright prettier
 - =typescript-language-server= 为 JavaScript、TypeScript、JSX 和 TSX 提供 LSP 功能。
 - =typescript= 提供 =tsserver=。
 - =prettier= 负责保存时格式化 JS、TS、JSX 和 TSX。
-- =pyright= 是本配置使用的 Python language server。
 
 React 项目仍应在项目目录安装自己的依赖：
 
@@ -122,13 +121,37 @@ npm install
 
 *** Python
 
+配置会按顺序寻找以下 Python language server：
+
+- =basedpyright-langserver=
+- =pyright-langserver=
+- =pylsp=
+
+推荐安装 =basedpyright=：
+
+#+begin_src sh
+uv tool install basedpyright
+#+end_src
+
+也可以选择用 npm 安装 =pyright=：
+
+#+begin_src sh
+npm install -g pyright
+#+end_src
+
+或者安装 =python-lsp-server=，它提供 =pylsp=：
+
+#+begin_src sh
+uv tool install python-lsp-server
+#+end_src
+
 安装 Ruff，用于 Python 格式化：
 
 #+begin_src sh
 uv tool install ruff@latest
 #+end_src
 
-如果 uv 提示工具目录不在 =PATH= 中，再执行：
+如果 uv 提示工具目录不在 =PATH= 中，再执行，然后重启 shell 或 GUI Emacs：
 
 #+begin_src sh
 uv tool update-shell
@@ -200,16 +223,17 @@ M-x describe-mode
 M-: (mapcar #'executable-find
             '("rg"
               "typescript-language-server"
-              "pyright-langserver"
               "ruff"
               "rust-analyzer"
               "rustfmt"
               "clangd"
               "clang-format"
               "prettier"))
+M-: (seq-some #'executable-find
+              '("basedpyright-langserver" "pyright-langserver" "pylsp"))
 #+end_src
 
-结果中不应出现 =nil=。
+第一条结果中不应出现 =nil=。第二条应返回一个可执行文件路径，表示至少安装了一个 Python language server。
 
 打开项目中的源文件后，Eglot 会自动启动。mode line 中应出现 =[eglot:项目名]=。常用检查命令：
 
