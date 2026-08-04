@@ -12,7 +12,7 @@
 (require 'seq)
 
 (defvar cyan/ensure-packages
-  '(embark embark-consult consult-eglot eldoc-box treemacs perspective)
+  '(embark embark-consult consult-eglot eldoc-box dockerfile-mode markdown-mode treemacs perspective)
   "Packages that should trigger an archive refresh before first install.")
 
 ;; Refresh metadata before installing new packages.  Mirror package tarballs can
@@ -66,6 +66,30 @@
 (setq tab-always-indent 'complete)
 
 (require 'treesit nil t)
+
+(when (fboundp 'yaml-ts-mode)
+  (dolist (pattern '("\\(?:docker-\\)?compose\\.ya?ml\\'"
+                     "\\.ya?ml\\'"))
+    (add-to-list 'auto-mode-alist `(,pattern . yaml-ts-mode))))
+
+(use-package dockerfile-mode
+  :mode
+  ("\\`Dockerfile\\(?:\\..*\\)?\\'" . cyan/dockerfile-mode)
+  :config
+  (defun cyan/dockerfile-mode ()
+    "Use the Tree-sitter Dockerfile mode when its grammar is installed."
+    (interactive)
+    (if (and (fboundp 'dockerfile-ts-mode)
+             (treesit-language-available-p 'dockerfile))
+        (dockerfile-ts-mode)
+      (dockerfile-mode))))
+
+(use-package markdown-mode
+  :mode
+  (("\\.md\\'" . markdown-mode)
+   ("\\.markdown\\'" . markdown-mode))
+  :custom
+  (markdown-fontify-code-blocks-natively t))
 
 (use-package expand-region
   :bind
@@ -196,7 +220,7 @@
 (use-package treesit-auto
   :custom
   (treesit-auto-langs
-   '(javascript typescript tsx python rust c cpp))
+   '(javascript typescript tsx python yaml rust c cpp))
   (treesit-auto-install nil)
   :config
   (defun cyan/treesit-install-grammars-async ()

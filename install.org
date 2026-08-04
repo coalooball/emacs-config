@@ -68,6 +68,8 @@ emacs --init-directory=/Users/mawangdan/code/emacs-config
 - =vertico=、=orderless=、=marginalia=
 - =consult=
 - =corfu=、=cape=
+- =dockerfile-mode=
+- =markdown-mode=
 - =treesit-auto=
 - =apheleia=
 - =magit=
@@ -197,6 +199,7 @@ clangd 会自动寻找 =build/compile_commands.json=。
 
 - JavaScript、TypeScript、TSX
 - Python
+- YAML
 - Rust
 - C、C++
 
@@ -213,7 +216,7 @@ M-x cyan/treesit-install-grammars-async
 M-x describe-mode
 #+end_src
 
-对应模式应为 =js-ts-mode=、=typescript-ts-mode=、=tsx-ts-mode=、=python-ts-mode=、=rust-ts-mode=、=c-ts-mode= 或 =c++-ts-mode=。
+对应模式应为 =js-ts-mode=、=typescript-ts-mode=、=tsx-ts-mode=、=python-ts-mode=、=yaml-ts-mode=、=rust-ts-mode=、=c-ts-mode= 或 =c++-ts-mode=。
 
 ** 6. 验证开发环境
 

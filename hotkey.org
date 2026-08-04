@@ -30,6 +30,24 @@
 | C-x p ! | 在项目中执行命令 |
 | C-x p & | 在项目中异步执行命令 |
 
+* magit
+
+| 快捷键  | 说明                  |
+|---------+-----------------------|
+| C-x g   | 打开 Magit status     |
+| s       | stage 当前文件/区块   |
+| u       | unstage 当前文件/区块 |
+| c c     | 创建 commit           |
+| C-c C-c | 完成 commit message   |
+| P p     | push 到 upstream      |
+| F p     | pull from upstream    |
+| b b     | 切换 branch           |
+| b c     | 创建 branch           |
+| l l     | 查看 log              |
+| d d     | 查看 diff             |
+| g       | 刷新 Magit buffer     |
+| q       | 退出当前 Magit buffer |
+
 * embark
 
 | 快捷键 | 说明                       |
@@ -52,6 +70,11 @@
 | C-c t f | 在 Treemacs 中定位当前文件    |
 | C-c t p | 添加目录到 Treemacs workspace |
 | C-c t s | 跳转到 Treemacs 窗口          |
+| P       | 开关 Treemacs peek mode       |
+| n       | 移动到下一个节点              |
+| p       | 移动到上一个节点              |
+| M-N     | 向下滚动预览窗口              |
+| M-P     | 向上滚动预览窗口              |
 
 * perspective
 
