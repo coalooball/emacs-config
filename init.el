@@ -12,97 +12,198 @@
                          ("melpa"  . "https://mirrors.tuna.tsinghua.edu.cn/elpa/melpa/")))
 (package-initialize)
 
-(setq cyan/packages
-      '(which-key
-        magit
-        vterm
-        ace-window
-        move-text
-        multiple-cursors
-        popper
-        vertico))
-
-(dolist (package cyan/packages)
-  (unless (package-installed-p package)
-    (unless package-archive-contents
-      (package-refresh-contents))
-    (package-install package)))
+(require 'use-package)
+(setq use-package-always-ensure t)
 
 ;; which-key
-(require 'which-key)
-
-(setq which-key-idle-delay 0.5
-      which-key-idle-secondary-delay 0.05)
-
-(which-key-mode 1)
+(use-package which-key ; Displays available key bindings in a popup.
+  :custom
+  (which-key-idle-delay 0.5)
+  (which-key-idle-secondary-delay 0.05)
+  :config
+  (which-key-mode 1))
 
 ;; vertico
-(require 'vertico)
-
-(setq vertico-cycle t)
-
-(vertico-mode 1)
-(savehist-mode 1)
+(use-package vertico ; Provides a vertical minibuffer completion interface.
+  :custom
+  (vertico-cycle t)
+  :config
+  (vertico-mode 1)
+  (savehist-mode 1))
 
 ;; magit
-(global-set-key (kbd "C-c g") #'magit-status)
+(use-package magit ; Provides a full Git interface inside Emacs.
+  :bind ("C-c g" . magit-status))
 
 ;; vterm
-(setq vterm-always-compile-module t
-      vterm-max-scrollback 20000)
-
-(defun cyan/vterm-same-window ()
-  "Open vterm in the selected window."
+(defun cyan/vterm-project-popup ()
+  "Open a new project-root vterm as a bottom popup."
   (interactive)
-  (let ((display-buffer-overriding-action
-         '((display-buffer-same-window))))
-    (vterm)))
+  (let* ((start-directory (if buffer-file-name
+                              (file-name-directory buffer-file-name)
+                            default-directory))
+         (project-root (or (projectile-project-root start-directory)
+                           start-directory))
+         (project-name
+          (file-name-nondirectory (directory-file-name project-root)))
+         (buffer-name (format "%s[vterm]" project-name))
+         (default-directory (file-name-as-directory project-root))
+         (display-buffer-overriding-action
+          '((popper-select-popup-at-bottom))))
+    (vterm buffer-name)))
 
-(global-set-key (kbd "C-c v") #'cyan/vterm-same-window)
+(use-package vterm ; Provides a fast terminal emulator backed by libvterm.
+  :custom
+  (vterm-always-compile-module t)
+  (vterm-max-scrollback 20000)
+  :bind ("C-c v" . cyan/vterm-project-popup))
 
 ;; ace-window
-(setq aw-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l)
-      aw-scope 'frame)
+(use-package ace-window ; Selects and switches windows using short keys.
+  :custom
+  (aw-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l))
+  (aw-scope 'frame)
+  :bind ("M-o" . ace-window))
 
-(global-set-key (kbd "M-o") #'ace-window)
+(use-package windresize ; Resizes windows interactively with direction keys.
+  :bind ("C-c z" . windresize))
 
 ;; winner-mode
-(winner-mode 1)
-
-(global-set-key (kbd "C-c <left>") #'winner-undo)
-(global-set-key (kbd "C-c <right>") #'winner-redo)
+(use-package winner ; Restores previous window configurations.
+  :ensure nil
+  :config
+  (winner-mode 1)
+  :bind (("C-c <left>" . winner-undo)
+         ("C-c <right>" . winner-redo)))
 
 ;; popper
-(require 'popper)
-(require 'popper-echo)
-
-(setq popper-reference-buffers
-      '("\\*Messages\\*"
-        "Output\\*$"
-        "\\*Async Shell Command\\*"
-        help-mode
-        compilation-mode))
-
-(global-set-key (kbd "C-`") #'popper-toggle)
-(global-set-key (kbd "M-`") #'popper-cycle)
-(global-set-key (kbd "C-M-`") #'popper-toggle-type)
-
-(popper-mode 1)
-(popper-echo-mode 1)
+(use-package popper ; Manages temporary and popup buffers consistently.
+  :demand t
+  :custom
+  (popper-reference-buffers
+   '("\\*Messages\\*"
+     "Output\\*$"
+     "\\*Async Shell Command\\*"
+     "\\[vterm\\]\\(?:<[0-9]+>\\)?$"
+     help-mode
+     compilation-mode))
+  :bind (("C-`" . popper-toggle)
+         ("M-`" . popper-cycle)
+         ("C-M-`" . popper-toggle-type))
+  :config
+  (popper-mode 1)
+  (popper-echo-mode 1))
 
 ;; move-text
-(require 'move-text)
-
-(global-set-key (kbd "M-<up>") #'move-text-up)
-(global-set-key (kbd "M-<down>") #'move-text-down)
+(use-package move-text ; Moves the current line or region up and down.
+  :bind (("M-<up>" . move-text-up)
+         ("M-<down>" . move-text-down)))
 
 ;; multiple-cursors
-(require 'multiple-cursors)
+(use-package multiple-cursors ; Edits multiple text locations simultaneously.
+  :bind (("C->" . mc/mark-next-like-this)
+         ("C-<" . mc/mark-previous-like-this)))
 
-;; (global-set-key (kbd "C-S-c C-S-c") #'mc/edit-lines)
-(global-set-key (kbd "C->") #'mc/mark-next-like-this)
-(global-set-key (kbd "C-<") #'mc/mark-previous-like-this)
-;; (global-set-key (kbd "C-c C-<") #'mc/mark-all-like-this)
+;; minibuffer completion and navigation
+(use-package orderless ; Matches completion candidates in any component order.
+  :custom
+  (completion-styles '(orderless basic))
+  (completion-category-defaults nil)
+  (completion-category-overrides '((file (styles partial-completion)))))
+
+(use-package marginalia ; Adds helpful annotations to minibuffer candidates.
+  :config
+  (marginalia-mode 1))
+
+(use-package consult ; Provides enhanced search, navigation, and buffer commands.
+  :bind (("C-s" . consult-line)
+         ("C-x b" . consult-buffer)
+         ("C-c s" . consult-ripgrep)
+         ("M-g i" . consult-imenu)
+         ("M-g f" . consult-flymake)))
+
+(use-package embark ; Runs context-sensitive actions on the item at point.
+  :bind (("C-." . embark-act)
+         ("C-c ." . embark-dwim)
+         ("C-h B" . embark-bindings))
+  :custom
+  (prefix-help-command #'embark-prefix-help-command))
+
+(use-package embark-consult ; Integrates Embark actions with Consult results.
+  :after (embark consult)
+  :hook (embark-collect-mode . consult-preview-at-point-mode))
+
+;; in-buffer completion
+(use-package corfu ; Displays completion candidates next to point.
+  :custom
+  (corfu-auto t)
+  (corfu-auto-delay 0.15)
+  (corfu-cycle t)
+  (corfu-preselect 'prompt)
+  :config
+  (global-corfu-mode 1))
+
+(use-package cape ; Adds reusable completion-at-point sources.
+  :init
+  (add-to-list 'completion-at-point-functions #'cape-file)
+  (add-to-list 'completion-at-point-functions #'cape-dabbrev))
+
+(use-package yasnippet ; Expands reusable code and text snippets.
+  :config
+  (yas-global-mode 1))
+
+;; language intelligence and diagnostics
+(use-package eglot ; Connects buffers to Language Server Protocol servers.
+  :ensure nil
+  :commands (eglot eglot-ensure)
+  :bind (:map eglot-mode-map
+              ("C-c l r" . eglot-rename)
+              ("C-c l a" . eglot-code-actions)
+              ("C-c l f" . eglot-format-buffer)))
+
+(use-package flymake ; Displays syntax and language-server diagnostics.
+  :ensure nil
+  :bind (:map flymake-mode-map
+              ("M-n" . flymake-goto-next-error)
+              ("M-p" . flymake-goto-prev-error)))
+
+(use-package treesit-auto ; Selects Tree-sitter major modes when available.
+  :custom
+  (treesit-auto-install 'prompt)
+  :config
+  (global-treesit-auto-mode 1))
+
+(use-package apheleia ; Formats source buffers asynchronously.
+  :config
+  (apheleia-global-mode 1))
+
+(use-package editorconfig ; Applies project-specific EditorConfig settings.
+  :config
+  (editorconfig-mode 1))
+
+;; projects and development environments
+(use-package projectile ; Provides project discovery and project-wide commands.
+  :demand t
+  :custom
+  (projectile-completion-system 'default)
+  :bind-keymap
+  ("C-c p" . projectile-command-map)
+  :config
+  (projectile-mode 1))
+
+(use-package envrc ; Loads direnv environments for project buffers.
+  :if (executable-find "direnv")
+  :config
+  (envrc-global-mode 1))
+
+;; Git integration
+(use-package diff-hl ; Shows Git changes in the window fringe.
+  :hook ((prog-mode . diff-hl-mode)
+         (text-mode . diff-hl-mode)
+         (magit-post-refresh . diff-hl-magit-post-refresh)))
+
+(use-package git-modes ; Provides major modes for Git configuration files.
+  :defer t)
 
 ;; Comment current line or active region.
 (global-set-key (kbd "C-;") #'comment-line)
@@ -140,8 +241,10 @@
 (defun cyan/revert-buffer-no-confirm ()
   "Revert the current buffer without confirmation."
   (interactive)
-  (revert-buffer :ignore-auto :noconfirm))
+  (revert-buffer :ignore-auto :noconfirm :preserve-modes))
 
 (global-set-key (kbd "C-c r") #'cyan/revert-buffer-no-confirm)
 
-(load-theme 'gruber-darker t)
+(use-package gruber-darker-theme ; Provides the Gruber Darker color theme.
+  :config
+  (load-theme 'gruber-darker t))
