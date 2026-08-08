@@ -1,512 +1,147 @@
+(when (fboundp 'tool-bar-mode)
+  (tool-bar-mode -1))
+
+(add-to-list 'default-frame-alist '(vertical-scroll-bars . nil))
+(when (fboundp 'scroll-bar-mode)
+  (scroll-bar-mode -1))
+
 (require 'package)
 
-(setq package-archives
-      '(("gnu" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/gnu/")
-        ("nongnu" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/nongnu/")
-        ("melpa" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/melpa/")))
-
-(when (boundp 'native-comp-async-report-warnings-errors)
-  (setq native-comp-async-report-warnings-errors nil))
-
+(setq package-archives '(("gnu"    . "https://mirrors.tuna.tsinghua.edu.cn/elpa/gnu/")
+                         ("nongnu" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/nongnu/")
+                         ("melpa"  . "https://mirrors.tuna.tsinghua.edu.cn/elpa/melpa/")))
 (package-initialize)
-(require 'seq)
 
-(defvar cyan/ensure-packages
-  '(embark embark-consult consult-eglot eldoc-box dockerfile-mode markdown-mode treemacs perspective)
-  "Packages that should trigger an archive refresh before first install.")
+(setq cyan/packages
+      '(which-key
+        magit
+        vterm
+        ace-window
+        move-text
+        multiple-cursors
+        popper
+        vertico))
 
-;; Refresh metadata before installing new packages.  Mirror package tarballs can
-;; disappear while the local archive cache still points to the old versions.
-(when (or (null package-archive-contents)
-          (seq-some (lambda (package)
-                      (not (package-installed-p package)))
-                    cyan/ensure-packages))
-  (package-refresh-contents))
+(dolist (package cyan/packages)
+  (unless (package-installed-p package)
+    (unless package-archive-contents
+      (package-refresh-contents))
+    (package-install package)))
 
-(require 'use-package)
-(setq use-package-always-ensure t)
+;; which-key
+(require 'which-key)
 
-(load-theme 'modus-vivendi t)
+(setq which-key-idle-delay 0.5
+      which-key-idle-secondary-delay 0.05)
 
-;; Fonts.
-(defun cyan/first-available-font (fonts)
-  "Return the first available font family from FONTS."
-  (catch 'found
-    (dolist (font fonts)
-      (when (member font (font-family-list))
-        (throw 'found font)))))
+(which-key-mode 1)
 
-(defun cyan/setup-fonts (&optional frame)
-  "Set a CJK-friendly monospace font for FRAME."
-  (when frame
-    (select-frame frame))
-  (when (display-graphic-p)
-    (when-let ((font (cyan/first-available-font
-                      '("Sarasa Mono SC"
-                        "Sarasa Term SC"
-                        "Noto Sans Mono CJK SC"
-                        "Source Han Mono SC"
-                        "Menlo"))))
-      (set-face-attribute 'default nil :family font :height 140)
-      (set-face-attribute 'fixed-pitch nil :family font :height 'unspecified)
-      (set-fontset-font t 'han (font-spec :family font) nil 'prepend))))
+;; vertico
+(require 'vertico)
 
-(cyan/setup-fonts)
-(add-hook 'after-make-frame-functions #'cyan/setup-fonts)
+(setq vertico-cycle t)
 
-;; Basic editing.
-(electric-pair-mode 1)
-(delete-selection-mode 1)
+(vertico-mode 1)
 (savehist-mode 1)
-(recentf-mode 1)
-(add-hook 'prog-mode-hook #'display-line-numbers-mode)
 
-(setq-default indent-tabs-mode nil
-              tab-width 4)
-(setq tab-always-indent 'complete)
+;; magit
+(global-set-key (kbd "C-c g") #'magit-status)
 
-(require 'treesit nil t)
+;; vterm
+(setq vterm-always-compile-module t
+      vterm-max-scrollback 20000)
 
-(when (fboundp 'yaml-ts-mode)
-  (dolist (pattern '("\\(?:docker-\\)?compose\\.ya?ml\\'"
-                     "\\.ya?ml\\'"))
-    (add-to-list 'auto-mode-alist `(,pattern . yaml-ts-mode))))
-
-(use-package dockerfile-mode
-  :mode
-  ("\\`Dockerfile\\(?:\\..*\\)?\\'" . cyan/dockerfile-mode)
-  :config
-  (defun cyan/dockerfile-mode ()
-    "Use the Tree-sitter Dockerfile mode when its grammar is installed."
-    (interactive)
-    (if (and (fboundp 'dockerfile-ts-mode)
-             (treesit-language-available-p 'dockerfile))
-        (dockerfile-ts-mode)
-      (dockerfile-mode))))
-
-(use-package markdown-mode
-  :mode
-  (("\\.md\\'" . markdown-mode)
-   ("\\.markdown\\'" . markdown-mode))
-  :custom
-  (markdown-fontify-code-blocks-natively t))
-
-(use-package expand-region
-  :bind
-  ("C-=" . er/expand-region))
-
-(use-package multiple-cursors
-  :bind
-  (("C-S-c C-S-c" . mc/edit-lines)
-   ("C->" . mc/mark-next-like-this)
-   ("C-<" . mc/mark-previous-like-this)
-   ("C-c C-<" . mc/mark-all-like-this)))
-
-(defun cyan/move-line-up ()
-  "Move the current line up by one line."
+(defun cyan/vterm-same-window ()
+  "Open vterm in the selected window."
   (interactive)
-  (let ((column (current-column)))
-    (if (= (line-beginning-position) (point-min))
-        (user-error "Already on first line")
-      (transpose-lines 1)
-      (forward-line -2)
-      (move-to-column column))))
+  (let ((display-buffer-overriding-action
+         '((display-buffer-same-window))))
+    (vterm)))
 
-(defun cyan/move-line-down ()
-  "Move the current line down by one line."
+(global-set-key (kbd "C-c v") #'cyan/vterm-same-window)
+
+;; ace-window
+(setq aw-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l)
+      aw-scope 'frame)
+
+(global-set-key (kbd "M-o") #'ace-window)
+
+;; winner-mode
+(winner-mode 1)
+
+(global-set-key (kbd "C-c <left>") #'winner-undo)
+(global-set-key (kbd "C-c <right>") #'winner-redo)
+
+;; popper
+(require 'popper)
+(require 'popper-echo)
+
+(setq popper-reference-buffers
+      '("\\*Messages\\*"
+        "Output\\*$"
+        "\\*Async Shell Command\\*"
+        help-mode
+        compilation-mode))
+
+(global-set-key (kbd "C-`") #'popper-toggle)
+(global-set-key (kbd "M-`") #'popper-cycle)
+(global-set-key (kbd "C-M-`") #'popper-toggle-type)
+
+(popper-mode 1)
+(popper-echo-mode 1)
+
+;; move-text
+(require 'move-text)
+
+(global-set-key (kbd "M-<up>") #'move-text-up)
+(global-set-key (kbd "M-<down>") #'move-text-down)
+
+;; multiple-cursors
+(require 'multiple-cursors)
+
+;; (global-set-key (kbd "C-S-c C-S-c") #'mc/edit-lines)
+(global-set-key (kbd "C->") #'mc/mark-next-like-this)
+(global-set-key (kbd "C-<") #'mc/mark-previous-like-this)
+;; (global-set-key (kbd "C-c C-<") #'mc/mark-all-like-this)
+
+;; Comment current line or active region.
+(global-set-key (kbd "C-;") #'comment-line)
+
+(defun cyan/copy-file-line ()
+  "Copy the absolute file path and current line or selected line range."
   (interactive)
-  (let ((column (current-column)))
-    (forward-line 1)
-    (if (eobp)
-        (progn
-          (forward-line -1)
-          (user-error "Already on last line"))
-      (transpose-lines 1)
-      (forward-line -1)
-      (move-to-column column))))
+  (unless buffer-file-name
+    (user-error "Current buffer is not visiting a file"))
+  (let* ((region (use-region-p))
+         (start-position (if region (region-beginning) (point)))
+         (region-end-position (and region (region-end)))
+         (end-position
+          (when region
+            (if (and (> region-end-position start-position)
+                     (save-excursion
+                       (goto-char region-end-position)
+                       (bolp)))
+                (1- region-end-position)
+              region-end-position)))
+         (start-line (line-number-at-pos start-position))
+         (end-line (and end-position (line-number-at-pos end-position)))
+         (location
+          (if (and end-line (/= start-line end-line))
+              (format "%s:%d-%d" (expand-file-name buffer-file-name)
+                      start-line end-line)
+            (format "%s:%d" (expand-file-name buffer-file-name)
+                    start-line))))
+    (kill-new location)
+    (setq deactivate-mark t)
+    (message "Copied: %s" location)))
 
-(defun cyan/duplicate-line-below ()
-  "Duplicate the current line below the current line."
+(global-set-key (kbd "C-c w") #'cyan/copy-file-line)
+
+(defun cyan/revert-buffer-no-confirm ()
+  "Revert the current buffer without confirmation."
   (interactive)
-  (let ((column (current-column))
-        (line (buffer-substring (line-beginning-position)
-                                (line-end-position))))
-    (end-of-line)
-    (newline)
-    (insert line)
-    (move-to-column column)))
+  (revert-buffer :ignore-auto :noconfirm))
 
-(global-set-key (kbd "M-<up>") #'cyan/move-line-up)
-(global-set-key (kbd "M-<down>") #'cyan/move-line-down)
-(global-set-key (kbd "C-c D") #'cyan/duplicate-line-below)
+(global-set-key (kbd "C-c r") #'cyan/revert-buffer-no-confirm)
 
-;; Window resizing.
-(global-set-key (kbd "C-M-<left>")  #'shrink-window-horizontally)
-(global-set-key (kbd "C-M-<right>") #'enlarge-window-horizontally)
-(global-set-key (kbd "C-M-<down>")  #'shrink-window)
-(global-set-key (kbd "C-M-<up>")    #'enlarge-window)
-
-(use-package exec-path-from-shell
-  :if (memq system-type '(darwin gnu/linux))
-  :config
-  (exec-path-from-shell-initialize)
-  (add-to-list 'exec-path (expand-file-name "~/.local/bin"))
-  (setenv "PATH" (concat (expand-file-name "~/.local/bin")
-                         path-separator
-                         (getenv "PATH"))))
-
-;; Minibuffer completion.
-(use-package vertico
-  :init
-  (vertico-mode))
-
-(use-package orderless
-  :custom
-  (completion-styles '(orderless basic))
-  (completion-category-overrides
-   '((file (styles partial-completion)))))
-
-(use-package marginalia
-  :init
-  (marginalia-mode))
-
-(use-package which-key
-  :ensure nil
-  :custom
-  (which-key-idle-delay 0.4)
-  :init
-  (which-key-mode))
-
-;; Context actions for minibuffer candidates, symbols, files, and buffers.
-(use-package embark
-  :bind
-  (("C-." . embark-act)
-   ("C-;" . embark-dwim)
-   ("C-h B" . embark-bindings))
-  :custom
-  (prefix-help-command #'embark-prefix-help-command)
-  :config
-  (require 'embark-consult nil t))
-
-;; Search and navigation.
-(use-package consult
-  :bind
-  (("C-s" . consult-line)
-   ("C-x b" . consult-buffer)
-   ("M-s r" . consult-ripgrep)
-   ("M-g i" . consult-imenu)))
-
-(use-package embark-consult
-  :ensure t
-  :after (embark consult)
-  :hook
-  (embark-collect-mode . consult-preview-at-point-mode))
-
-;; Completion inside source buffers.
-(use-package corfu
-  :custom
-  (corfu-auto t)
-  (corfu-auto-delay 0.2)
-  (corfu-auto-prefix 2)
-  (corfu-cycle t)
-  :init
-  (global-corfu-mode))
-
-(use-package cape
-  :init
-  (add-to-list 'completion-at-point-functions #'cape-file))
-
-;; Install and enable Tree-sitter modes for the languages used here.
-(use-package treesit-auto
-  :custom
-  (treesit-auto-langs
-   '(javascript typescript tsx python yaml rust c cpp))
-  (treesit-auto-install nil)
-  :config
-  (defun cyan/treesit-install-grammars-async ()
-    "Install missing Tree-sitter grammars in a separate Emacs process."
-    (interactive)
-    (let* ((emacs (shell-quote-argument
-                   (expand-file-name invocation-name invocation-directory)))
-           (init-file (shell-quote-argument (expand-file-name user-init-file)))
-           (install-form
-            (shell-quote-argument
-             "(progn
-                (require 'treesit-auto)
-                (setq treesit-auto-install t)
-                (treesit-auto-install-all))")))
-      (async-shell-command
-       (format "%s --batch --load %s --eval %s"
-               emacs init-file install-form)
-       "*Tree-sitter grammar install*")))
-
-  (treesit-auto-add-to-auto-mode-alist 'all)
-  (global-treesit-auto-mode))
-
-;; Language Server Protocol support.
-(use-package eglot
-  :ensure nil
-  :custom
-  (eglot-autoshutdown t)
-  (eglot-send-changes-idle-time 0.5)
-  :config
-  (add-to-list
-   'eglot-server-programs
-   `((python-mode python-ts-mode)
-     . ,(eglot-alternatives
-         '(("basedpyright-langserver" "--stdio")
-           ("pyright-langserver" "--stdio")
-           ("pylsp")))))
-
-  ;; Eglot in Emacs 30.2 does not register a JS/TS server by default.
-  (add-to-list
-   'eglot-server-programs
-   '((js-mode js-ts-mode typescript-ts-mode tsx-ts-mode)
-     . ("typescript-language-server" "--stdio")))
-
-  (add-to-list
-   'eglot-server-programs
-   '((json-mode json-ts-mode js-json-mode)
-     . ("vscode-json-language-server" "--stdio")))
-
-  (dolist (hook '(js-ts-mode-hook
-                  typescript-ts-mode-hook
-                  tsx-ts-mode-hook
-                  python-mode-hook
-                  python-ts-mode-hook
-                  rust-ts-mode-hook
-                  c-ts-mode-hook
-                  c++-ts-mode-hook))
-    (add-hook hook #'eglot-ensure)))
-
-(use-package consult-eglot
-  :after (consult eglot)
-  :bind
-  ("M-g s" . consult-eglot-symbols))
-
-(use-package eldoc-box
-  :after eglot
-  :hook
-  (eglot-managed-mode . cyan/enable-eldoc-box)
-  :bind
-  (:map eglot-mode-map
-        ("C-h ." . cyan/eldoc-box-help-at-point))
-  :config
-  (defun cyan/eldoc-box-help-at-point ()
-    "Show documentation at point without moving focus to the child frame."
-    (interactive)
-    (when (fboundp 'eldoc-box-quit-frame)
-      (eldoc-box-quit-frame))
-    (eldoc-box-help-at-point))
-
-  (defun cyan/enable-eldoc-box ()
-    "Keep Eglot documentation available on demand without auto popups."
-    (setq-local eldoc-echo-area-use-multiline-p nil)
-    (when (display-graphic-p)
-      (eldoc-box-hover-at-point-mode -1)
-      (eldoc-box-hover-mode -1))))
-
-;; Format source files after saving without moving point unnecessarily.
-(use-package apheleia
-  :config
-  (setf (alist-get 'ruff apheleia-formatters)
-        '("ruff" "format" "--stdin-filename" filepath "-")
-        (alist-get 'clang-format apheleia-formatters)
-        '("clang-format" "--assume-filename" filepath))
-
-  (dolist (mode '(js-ts-mode typescript-ts-mode tsx-ts-mode))
-    (setf (alist-get mode apheleia-mode-alist) 'prettier))
-
-  (setf (alist-get 'python-mode apheleia-mode-alist) 'ruff
-        (alist-get 'python-ts-mode apheleia-mode-alist) 'ruff
-        (alist-get 'rust-ts-mode apheleia-mode-alist) 'rustfmt
-        (alist-get 'c-ts-mode apheleia-mode-alist) 'clang-format
-        (alist-get 'c++-ts-mode apheleia-mode-alist) 'clang-format)
-
-  (apheleia-global-mode 1))
-
-(use-package magit
-  :bind
-  ("C-x g" . magit-status))
-
-;; Project tree sidebar.
-(use-package treemacs
-  :bind
-  (("C-c t t" . treemacs)
-   ("C-c t f" . treemacs-find-file)
-   ("C-c t p" . treemacs-add-project-to-workspace)
-   ("C-c t d" . treemacs-remove-project-from-workspace)
-   ("C-c t s" . treemacs-select-window))
-  :custom
-  (treemacs-position 'right)
-  (treemacs-width 32)
-  (treemacs-width-is-initially-locked nil)
-  (treemacs-follow-after-init t)
-  (treemacs-is-never-other-window t))
-
-;; Isolated workspaces with separate buffer lists.
-(use-package perspective
-  :bind
-  (("C-c w s" . persp-switch)
-   ("C-c w k" . persp-kill)
-   ("C-c w n" . persp-next)
-   ("C-c w p" . persp-prev)
-   ("C-c w b" . persp-switch-to-buffer))
-  :custom
-  (persp-mode-prefix-key (kbd "C-c w"))
-  :init
-  (persp-mode))
-
-;; Show Git changes in the fringe, similar to VS Code's gutter markers.
-(use-package diff-hl
-  :hook
-  (magit-post-refresh . diff-hl-magit-post-refresh)
-  :init
-  (global-diff-hl-mode)
-  :config
-  (diff-hl-flydiff-mode)
-  (unless (display-graphic-p)
-    (diff-hl-margin-mode)))
-
-;; Database connections.
-;;
-;; Emacs' built-in sql.el talks to the standard command-line clients:
-;; psql, mysql, sqlite3, etc.  Keep passwords out of this file; use
-;; ~/.pgpass, ~/.my.cnf, environment variables, or the client's password
-;; prompt instead.
-(use-package sql
-  :ensure nil
-  :mode
-  (("\\.sql\\'" . sql-mode))
-  :bind
-  (("C-c d c" . sql-connect)
-   ("C-c d p" . sql-set-product)
-   :map sql-mode-map
-   ("C-c C-c" . sql-send-paragraph)
-   ("C-c C-b" . sql-send-buffer)
-   ("C-c C-r" . sql-send-region)
-   ("C-c C-z" . sql-show-sqli-buffer))
-  :custom
-  (sql-postgres-login-params
-   '((user :default "postgres")
-     (database :default "postgres")
-     (server :default "localhost")
-     (port :default 5432)))
-  (sql-mysql-login-params
-   '((user :default "root")
-     (database :default "")
-     (server :default "localhost")
-     (port :default 3306)))
-  (sql-connection-alist
-   '(("local-postgres"
-      (sql-product 'postgres)
-      (sql-user "postgres")
-      (sql-server "localhost")
-      (sql-port 5432)
-      (sql-database "postgres"))
-     ("local-mysql"
-      (sql-product 'mysql)
-      (sql-user "root")
-      (sql-server "localhost")
-      (sql-port 3306)
-      (sql-database ""))
-     ("local-sqlite"
-      (sql-product 'sqlite)
-      (sql-database "~/database.sqlite3"))))
-  :hook
-  (sql-interactive-mode . toggle-truncate-lines)
-  :config
-  (add-hook 'sql-mode-hook
-            (lambda ()
-              (setq-local comment-start "-- "
-                          comment-end ""))))
-
-;; Notes, tasks, and agenda.
-(use-package org
-  :ensure nil
-  :demand t
-  :bind
-  (("C-c a" . org-agenda)
-   ("C-c c" . org-capture)
-   ("C-c l" . org-store-link))
-  :hook
-  ((org-mode . visual-line-mode)
-   (org-mode . org-indent-mode))
-  :custom
-  (org-directory (expand-file-name "org" user-emacs-directory))
-  (org-default-notes-file (expand-file-name "inbox.org" org-directory))
-  (org-agenda-files (list org-directory))
-  (org-log-done 'time)
-  (org-startup-folded 'content)
-  (org-startup-indented t)
-  (org-hide-emphasis-markers t)
-  (org-pretty-entities t)
-  (org-src-fontify-natively t)
-  (org-src-tab-acts-natively t)
-  (org-todo-keywords
-   '((sequence "TODO(t)" "NEXT(n)" "WAIT(w@/!)" "|" "DONE(d!)" "CANCELLED(c@)")))
-  (org-capture-templates
-   `(("t" "Task" entry
-      (file+headline ,(expand-file-name "inbox.org" org-directory) "Tasks")
-      "* TODO %?\n  %U\n  %a")
-     ("n" "Note" entry
-      (file+headline ,(expand-file-name "notes.org" org-directory) "Notes")
-      "* %?\n  %U\n  %a")))
-  :config
-  (set-face-attribute 'org-table nil :inherit 'fixed-pitch)
-  (make-directory org-directory t))
-
-(with-eval-after-load 'eat
-  (setq eat-minimum-latency 0.03
-        eat-maximum-latency 0.18
-        eat-kill-buffer-on-exit t
-        eat-enable-shell-prompt-annotation nil
-        eat-term-scrollback-size 20000
-        eat-very-visible-cursor-type '(box nil nil)
-        eat-very-visible-vertical-bar-cursor-type '(bar nil nil)
-        eat-very-visible-horizontal-bar-cursor-type '(hbar nil nil))
-
-  ;; Eat resizes the terminal and redisplays it synchronously on every
-  ;; window-size change.  When a TUI such as Codex is streaming output,
-  ;; dragging another split can create enough resize/redisplay work to
-  ;; monopolize Emacs' single Lisp thread.  Coalesce repeated resize
-  ;; requests and apply only the latest size shortly after dragging.
-  (defvar cyan/eat-resize-timers (make-hash-table :weakness 'key))
-
-  (defun cyan/eat-adjust-process-window-size-debounced
-      (orig-fn process windows)
-    (let ((buffer (process-buffer process)))
-      (if (not (buffer-live-p buffer))
-          (funcall orig-fn process windows)
-        (when-let ((timer (gethash process cyan/eat-resize-timers)))
-          (cancel-timer timer))
-        (puthash
-         process
-         (run-with-timer
-          0.12 nil
-          (lambda (process buffer orig-fn)
-            (remhash process cyan/eat-resize-timers)
-            (when (and (process-live-p process)
-                       (buffer-live-p buffer))
-              (with-current-buffer buffer
-                (funcall orig-fn
-                         process
-                         (get-buffer-window-list buffer nil t)))))
-          process
-          buffer
-          orig-fn)
-         cyan/eat-resize-timers)
-        nil)))
-
-  (advice-remove 'eat--adjust-process-window-size
-                 #'cyan/eat-adjust-process-window-size-debounced)
-  (advice-add 'eat--adjust-process-window-size
-              :around #'cyan/eat-adjust-process-window-size-debounced))
-
-(use-package vterm
-  :commands vterm
-  :custom
-  ;; Compile vterm-module automatically on first load instead of asking
-  ;; interactively, which fails during batch/noninteractive startup.
-  (vterm-always-compile-module t)
-  (vterm-max-scrollback 20000))
+(load-theme 'gruber-darker t)
