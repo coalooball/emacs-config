@@ -56,7 +56,13 @@
   :custom
   (vterm-always-compile-module t)
   (vterm-max-scrollback 20000)
-  :bind ("C-c v" . cyan/vterm-project-popup))
+  :bind ("C-c v" . cyan/vterm-project-popup)
+  :config
+  ;; Let Popper handle M-` instead of sending it to the terminal.
+  (unless (member "M-`" vterm-keymap-exceptions)
+    (customize-set-variable
+     'vterm-keymap-exceptions
+     (cons "M-`" vterm-keymap-exceptions))))
 
 ;; ace-window
 (use-package ace-window ; Selects and switches windows using short keys.
@@ -65,8 +71,25 @@
   (aw-scope 'frame)
   :bind ("M-o" . ace-window))
 
+(defun cyan/remember-popper-window-height (&rest _)
+  "Use the current popup height for subsequently opened Popper windows."
+  (when (and (bound-and-true-p popper-mode)
+             (popper-popup-p (current-buffer)))
+    (setq popper-window-height (window-total-height))))
+
 (use-package windresize ; Resizes windows interactively with direction keys.
-  :bind ("C-c z" . windresize))
+  :bind ("C-c z" . windresize)
+  :config
+  ;; Reuse a manually confirmed popup height when cycling Popper buffers.
+  (unless (advice-member-p #'cyan/remember-popper-window-height
+                           #'windresize-exit)
+    (advice-add #'windresize-exit
+                :before #'cyan/remember-popper-window-height))
+  ;; windresize already binds RET, the ordinary Return event (C-m).
+  ;; Bind the GUI Return event before vterm handles it.
+  (define-key windresize-map (kbd "<return>") #'windresize-exit)
+  ;; Bind the numeric keypad Enter event before vterm handles it.
+  (define-key windresize-map (kbd "<kp-enter>") #'windresize-exit))
 
 ;; winner-mode
 (use-package winner ; Restores previous window configurations.
@@ -80,6 +103,7 @@
 (use-package popper ; Manages temporary and popup buffers consistently.
   :demand t
   :custom
+  (popper-window-height 15)
   (popper-reference-buffers
    '("\\*Messages\\*"
      "Output\\*$"
@@ -198,9 +222,11 @@
 
 ;; Git integration
 (use-package diff-hl ; Shows Git changes in the window fringe.
-  :hook ((prog-mode . diff-hl-mode)
-         (text-mode . diff-hl-mode)
-         (magit-post-refresh . diff-hl-magit-post-refresh)))
+  :demand t
+  :hook (magit-post-refresh . diff-hl-magit-post-refresh)
+  :config
+  (global-diff-hl-mode 1)
+  (diff-hl-flydiff-mode 1))
 
 (use-package git-modes ; Provides major modes for Git configuration files.
   :defer t)
@@ -241,10 +267,31 @@
 (defun cyan/revert-buffer-no-confirm ()
   "Revert the current buffer without confirmation."
   (interactive)
-  (revert-buffer :ignore-auto :noconfirm :preserve-modes))
+  (revert-buffer :ignore-auto :noconfirm :preserve-modes)
+  (when (bound-and-true-p diff-hl-mode)
+    (diff-hl-update)))
 
 (global-set-key (kbd "C-c r") #'cyan/revert-buffer-no-confirm)
 
 (use-package gruber-darker-theme ; Provides the Gruber Darker color theme.
+  :defer t)
+
+(use-package catppuccin-theme ; Provides the Catppuccin pastel color theme.
+  :defer t
+  :custom
+  (catppuccin-flavor 'mocha))
+
+(use-package vscode-dark-plus-theme ; Provides the Visual Studio Code Dark+ theme.
   :config
-  (load-theme 'gruber-darker t))
+  (mapc #'disable-theme custom-enabled-themes)
+  (load-theme 'vscode-dark-plus t)
+  ;; Replace the blue mode lines with neutral VS Code grays.
+  (custom-theme-set-faces
+   'vscode-dark-plus
+   '(mode-line
+     ((t (:foreground "#fafafa" :background "#333333" :box nil))))
+   '(mode-line-inactive
+     ((t (:foreground "#858585" :background "#252526" :box nil))))
+   '(mode-line-buffer-id
+     ((t (:foreground unspecified :weight bold)))))
+  (enable-theme 'vscode-dark-plus))
