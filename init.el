@@ -10,6 +10,9 @@
 (setq package-archives '(("gnu"    . "https://mirrors.tuna.tsinghua.edu.cn/elpa/gnu/")
                          ("nongnu" . "https://mirrors.tuna.tsinghua.edu.cn/elpa/nongnu/")
                          ("melpa"  . "https://mirrors.tuna.tsinghua.edu.cn/elpa/melpa/")))
+(setq package-install-upgrade-built-in nil)
+(setq package-load-list '((project nil) all))
+(add-to-list 'package-pinned-packages '(eglot . "gnu"))
 (package-initialize)
 
 (require 'use-package)
@@ -457,10 +460,21 @@
   :config
   (yas-global-mode 1))
 
+;; HTTP requests in Org files
+(use-package verb ; Sends and manages HTTP requests from Org buffers.
+  :after org
+  :config
+  (define-key org-mode-map (kbd "C-c C-r") verb-command-map))
+
 ;; language intelligence and diagnostics
 (use-package eglot ; Connects buffers to Language Server Protocol servers.
-  :ensure nil
+  :ensure t
   :commands (eglot eglot-ensure)
+  :hook ((python-mode python-ts-mode
+          rust-mode rust-ts-mode
+          js-mode js-ts-mode
+          typescript-mode typescript-ts-mode tsx-ts-mode)
+         . eglot-ensure)
   :bind (:map eglot-mode-map
               ("C-c l r" . eglot-rename)
               ("C-c l a" . eglot-code-actions)
