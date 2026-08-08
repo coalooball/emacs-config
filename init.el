@@ -36,33 +36,314 @@
   :bind ("C-c g" . magit-status))
 
 ;; vterm
+(defun cyan/current-project-root ()
+  "Return the Projectile root for the current file or directory."
+  (let ((start-directory (if buffer-file-name
+                             (file-name-directory buffer-file-name)
+                           default-directory)))
+    (file-name-as-directory
+     (or (projectile-project-root start-directory)
+         start-directory))))
+
+(defvar cyan/vterm-popup-buffers nil
+  "Project vterm popup buffers in creation order.")
+
+(defvar cyan/vterm-regular-buffers nil
+  "Project vterm regular-window buffers in creation order.")
+
+(defvar-local cyan/vterm-session-type nil
+  "Window group used when cycling project vterm buffers.")
+
+(defvar-local cyan/vterm-directory-tracking-enabled nil
+  "Whether shell-side vterm directory tracking has been enabled.")
+
+(defun cyan/vterm-buffer-list-variable ()
+  "Return the buffer-list variable for the current vterm session."
+  (pcase cyan/vterm-session-type
+    ('popup 'cyan/vterm-popup-buffers)
+    ('regular 'cyan/vterm-regular-buffers)
+    (_ (user-error "Current buffer is not a managed project vterm"))))
+
+(defun cyan/vterm-cycle-buffer (step)
+  "Switch STEP positions through vterms in the current window group."
+  (let* ((list-variable (cyan/vterm-buffer-list-variable))
+         (buffers (seq-filter #'buffer-live-p
+                              (symbol-value list-variable)))
+         (count (length buffers)))
+    (set list-variable buffers)
+    (cond
+     ((zerop count)
+      (user-error "No vterm buffers in this window group"))
+     ((= count 1)
+      (message "Only one vterm buffer in this window group"))
+     (t
+      (let* ((current-index
+              (or (seq-position buffers (current-buffer)) 0))
+             (next-index (mod (+ current-index step) count)))
+        (switch-to-buffer (nth next-index buffers)))))))
+
+(defun cyan/vterm-next-buffer ()
+  "Switch to the next project vterm buffer."
+  (interactive)
+  (cyan/vterm-cycle-buffer 1))
+
+(defun cyan/vterm-previous-buffer ()
+  "Switch to the previous project vterm buffer."
+  (interactive)
+  (cyan/vterm-cycle-buffer -1))
+
+(defvar-keymap cyan/vterm-session-mode-map
+  :doc "Keymap used by project vterm sessions."
+  "M-n" #'cyan/vterm-next-buffer
+  "M-p" #'cyan/vterm-previous-buffer)
+
+(define-minor-mode cyan/vterm-session-mode
+  "Enable navigation between project vterm sessions."
+  :init-value nil
+  :lighter nil
+  :keymap cyan/vterm-session-mode-map)
+
+(defun cyan/rename-vterm-for-current-directory (&rest _)
+  "Rename the managed vterm buffer for its current directory."
+  (when cyan/vterm-session-type
+    (let* ((directory
+            (directory-file-name
+             (file-local-name (expand-file-name default-directory))))
+           (directory-name (file-name-nondirectory directory))
+           (display-name (if (string= directory-name "")
+                             directory
+                           directory-name))
+           (suffix (pcase cyan/vterm-session-type
+                     ('popup "vterm")
+                     ('regular "vterm-regular"))))
+      (when suffix
+        (rename-buffer (format "%s[%s]" display-name suffix) t)))))
+
+(defun cyan/vterm-enable-directory-tracking ()
+  "Load vterm's directory tracking integration for a local zsh."
+  (when (and (not cyan/vterm-directory-tracking-enabled)
+             (not (file-remote-p default-directory))
+             (string-match-p "\\(?:^\\|/\\)zsh\\(?:[[:space:]]\\|$\\)"
+                             vterm-shell))
+    (let* ((vterm-directory (file-name-directory (locate-library "vterm")))
+           (script (expand-file-name "etc/emacs-vterm-zsh.sh"
+                                     vterm-directory)))
+      (when (file-readable-p script)
+        (vterm-send-string
+         (format "source %s; clear" (shell-quote-argument script)))
+        (vterm-send-return)
+        (setq-local cyan/vterm-directory-tracking-enabled t)))))
+
+(defun cyan/register-vterm-buffer (buffer session-type)
+  "Register BUFFER as a project vterm of SESSION-TYPE."
+  (unless (memq session-type '(popup regular))
+    (error "Invalid vterm session type: %S" session-type))
+  (with-current-buffer buffer
+    (setq-local cyan/vterm-session-type session-type)
+    (cyan/vterm-session-mode 1)
+    (cyan/rename-vterm-for-current-directory))
+  (setq cyan/vterm-popup-buffers
+        (delq buffer (seq-filter #'buffer-live-p
+                                 cyan/vterm-popup-buffers))
+        cyan/vterm-regular-buffers
+        (delq buffer (seq-filter #'buffer-live-p
+                                 cyan/vterm-regular-buffers)))
+  (let ((list-variable (if (eq session-type 'popup)
+                           'cyan/vterm-popup-buffers
+                         'cyan/vterm-regular-buffers)))
+    (set list-variable (append (symbol-value list-variable) (list buffer)))))
+
 (defun cyan/vterm-project-popup ()
   "Open a new project-root vterm as a bottom popup."
   (interactive)
-  (let* ((start-directory (if buffer-file-name
-                              (file-name-directory buffer-file-name)
-                            default-directory))
-         (project-root (or (projectile-project-root start-directory)
-                           start-directory))
+  (let* ((project-root (cyan/current-project-root))
          (project-name
           (file-name-nondirectory (directory-file-name project-root)))
          (buffer-name (format "%s[vterm]" project-name))
-         (default-directory (file-name-as-directory project-root))
+         (default-directory project-root)
          (display-buffer-overriding-action
           '((popper-select-popup-at-bottom))))
-    (vterm buffer-name)))
+    (cyan/register-vterm-buffer (vterm buffer-name) 'popup)))
+
+(defun cyan/regular-window-for-vterm ()
+  "Return the most recently used non-side window for a vterm session."
+  (let ((selected (selected-window)))
+    (if (not (window-parameter selected 'window-side))
+        selected
+      (car
+       (sort (seq-filter
+              (lambda (window)
+                (not (window-parameter window 'window-side)))
+              (window-list nil 'nomini))
+             (lambda (left right)
+               (> (window-use-time left) (window-use-time right))))))))
+
+(defun cyan/vterm-project-regular ()
+  "Open a new project-root vterm in a regular window."
+  (interactive)
+  (let* ((project-root (cyan/current-project-root))
+         (project-name
+          (file-name-nondirectory (directory-file-name project-root)))
+         (buffer-name (format "%s[vterm-regular]" project-name))
+         (target-window (cyan/regular-window-for-vterm)))
+    (unless (window-live-p target-window)
+      (user-error "No regular window is available for vterm"))
+    (select-window target-window)
+    (let ((default-directory project-root)
+          (display-buffer-overriding-action
+           '((display-buffer-same-window))))
+      (cyan/register-vterm-buffer (vterm buffer-name) 'regular))))
+
+(defalias 'vterm-regular #'cyan/vterm-project-regular)
+
+(defvar cyan/codex-buffers nil
+  "Codex vterm buffers in creation order.")
+
+(defun cyan/codex-cycle-buffer (step)
+  "Switch STEP positions through live Codex buffers."
+  (setq cyan/codex-buffers
+        (seq-filter #'buffer-live-p cyan/codex-buffers))
+  (let ((count (length cyan/codex-buffers)))
+    (cond
+     ((zerop count)
+      (user-error "No Codex buffers"))
+     ((= count 1)
+      (message "Only one Codex buffer"))
+     (t
+      (let* ((current-index
+              (or (seq-position cyan/codex-buffers (current-buffer)) 0))
+             (next-index (mod (+ current-index step) count)))
+        (switch-to-buffer (nth next-index cyan/codex-buffers)))))))
+
+(defun cyan/codex-next-buffer ()
+  "Switch to the next Codex buffer."
+  (interactive)
+  (cyan/codex-cycle-buffer 1))
+
+(defun cyan/codex-previous-buffer ()
+  "Switch to the previous Codex buffer."
+  (interactive)
+  (cyan/codex-cycle-buffer -1))
+
+(defun cyan/codex-kill-session ()
+  "Kill the current Codex process, its vterm process, and its buffer."
+  (interactive)
+  (unless cyan/codex-session-mode
+    (user-error "Current buffer is not a Codex session"))
+  (let ((buffer (current-buffer))
+        (process (get-buffer-process (current-buffer))))
+    (setq cyan/codex-buffers (delq buffer cyan/codex-buffers))
+    (when (process-live-p process)
+      (set-process-query-on-exit-flag process nil)
+      ;; Kill Codex as the terminal's foreground process group first.
+      (ignore-errors (kill-process process t))
+      (when (process-live-p process)
+        (delete-process process)))
+    (when (buffer-live-p buffer)
+      (kill-buffer buffer))))
+
+(defvar-keymap cyan/codex-session-mode-map
+  :doc "Keymap used by Codex vterm sessions."
+  "M-n" #'cyan/codex-next-buffer
+  "M-p" #'cyan/codex-previous-buffer
+  "M-k" #'cyan/codex-kill-session)
+
+(define-minor-mode cyan/codex-session-mode
+  "Enable navigation between Codex vterm sessions."
+  :init-value nil
+  :lighter " Codex"
+  :keymap cyan/codex-session-mode-map)
+
+(defun cyan/register-codex-buffer (buffer)
+  "Register BUFFER as a navigable Codex vterm session."
+  (with-current-buffer buffer
+    (cyan/codex-session-mode 1))
+  (unless (memq buffer cyan/codex-buffers)
+    (setq cyan/codex-buffers
+          (append (seq-filter #'buffer-live-p cyan/codex-buffers)
+                  (list buffer)))))
+
+(defun cyan/regular-window-for-codex ()
+  "Return the most recently used non-side window for a Codex session."
+  (let ((selected (selected-window)))
+    (if (not (window-parameter selected 'window-side))
+        selected
+      (car
+       (sort (seq-filter
+              (lambda (window)
+                (not (window-parameter window 'window-side)))
+              (window-list nil 'nomini))
+             (lambda (left right)
+               (> (window-use-time left) (window-use-time right))))))))
+
+(defun cyan/codex ()
+  "Start a new Codex vterm session at the current project root."
+  (interactive)
+  (let* ((project-root (cyan/current-project-root))
+         (project-name
+          (file-name-nondirectory (directory-file-name project-root)))
+         (buffer-name (format "%s[codex]" project-name))
+         (target-window (cyan/regular-window-for-codex)))
+    (unless (window-live-p target-window)
+      (user-error "No regular window is available for Codex"))
+    (select-window target-window)
+    (let* ((default-directory project-root)
+           (display-buffer-overriding-action
+            '((display-buffer-same-window)))
+           (buffer (vterm buffer-name)))
+      (cyan/register-codex-buffer buffer)
+      (with-current-buffer buffer
+        (vterm-send-string "codex")
+        (vterm-send-return))
+      buffer)))
+
+(defalias 'codex #'cyan/codex)
+
+(defun to-popper ()
+  "Move the current vterm window into Popper."
+  (interactive)
+  (unless (derived-mode-p 'vterm-mode)
+    (user-error "Current buffer is not a vterm"))
+  (when (bound-and-true-p cyan/codex-session-mode)
+    (user-error "Codex sessions cannot be moved into the vterm popup group"))
+  (let ((buffer (current-buffer)))
+    (cyan/register-vterm-buffer buffer 'popup)
+    (popper-lower-to-popup buffer)))
 
 (use-package vterm ; Provides a fast terminal emulator backed by libvterm.
   :custom
   (vterm-always-compile-module t)
   (vterm-max-scrollback 20000)
-  :bind ("C-c v" . cyan/vterm-project-popup)
+  :hook (vterm-mode . cyan/vterm-enable-directory-tracking)
+  :bind (("C-c v" . cyan/vterm-project-popup)
+         ([remap vterm] . cyan/vterm-project-popup))
   :config
+  (unless (advice-member-p #'cyan/rename-vterm-for-current-directory
+                           #'vterm--set-directory)
+    (advice-add #'vterm--set-directory
+                :after #'cyan/rename-vterm-for-current-directory))
   ;; Let Popper handle M-` instead of sending it to the terminal.
   (unless (member "M-`" vterm-keymap-exceptions)
     (customize-set-variable
      'vterm-keymap-exceptions
-     (cons "M-`" vterm-keymap-exceptions))))
+     (cons "M-`" vterm-keymap-exceptions)))
+  ;; Register managed vterms that existed before re-evaluating this config.
+  (dolist (buffer (buffer-list))
+    (when (and (buffer-live-p buffer)
+               (with-current-buffer buffer
+                 (derived-mode-p 'vterm-mode)))
+      (with-current-buffer buffer
+        (cyan/vterm-enable-directory-tracking))
+      (cond
+       ((string-match-p "\\[codex\\]\\(?:<[0-9]+>\\)?$"
+                        (buffer-name buffer))
+        (cyan/register-codex-buffer buffer))
+       ((string-match-p "\\[vterm-regular\\]\\(?:<[0-9]+>\\)?$"
+                        (buffer-name buffer))
+        (cyan/register-vterm-buffer buffer 'regular))
+       ((string-match-p "\\[vterm\\]\\(?:<[0-9]+>\\)?$"
+                        (buffer-name buffer))
+        (cyan/register-vterm-buffer buffer 'popup))))))
 
 ;; ace-window
 (use-package ace-window ; Selects and switches windows using short keys.
