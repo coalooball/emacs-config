@@ -487,10 +487,10 @@
               ("M-p" . flymake-goto-prev-error)))
 
 (use-package treesit-auto ; Selects Tree-sitter major modes when available.
-  :custom
-  (treesit-auto-install 'prompt)
   :config
-  (global-treesit-auto-mode 1))
+  ;; Register the modes once.  The global mode rebuilds its remapping table for
+  ;; every opened file, which is noticeably slow when many grammars are absent.
+  (treesit-auto-add-to-auto-mode-alist))
 
 (use-package apheleia ; Formats source buffers asynchronously.
   :config
@@ -588,5 +588,26 @@
    '(mode-line-inactive
      ((t (:foreground "#858585" :background "#252526" :box nil))))
    '(mode-line-buffer-id
-     ((t (:foreground unspecified :weight bold)))))
+     ((t (:foreground unspecified :weight bold))))
+   ;; Give Magit diffs stronger contrast while keeping the current theme.
+   '(magit-diff-added
+     ((t (:foreground "#b5d6a7" :background "#20352a"))))
+   '(magit-diff-added-highlight
+     ((t (:foreground "#c3e6b3" :background "#294936"))))
+   '(magit-diff-removed
+     ((t (:foreground "#e8a0a6" :background "#3a2325"))))
+   '(magit-diff-removed-highlight
+     ((t (:foreground "#ffc0c5" :background "#522b2f"))))
+   '(magit-diff-context
+     ((t (:foreground "#b8b8b8" :background unspecified))))
+   '(magit-diff-context-highlight
+     ((t (:foreground "#d4d4d4" :background "#2a2d2e"))))
+   '(magit-diff-hunk-heading
+     ((t (:foreground "#9cdcfe" :background "#343a40"))))
+   '(magit-diff-hunk-heading-highlight
+     ((t (:foreground "#ffffff" :background "#46515e" :weight bold))))
+   '(magit-diff-file-heading
+     ((t (:foreground "#dcdcaa" :weight bold))))
+   '(magit-diff-file-heading-highlight
+     ((t (:foreground "#fff2b2" :background "#30343b" :weight bold)))))
   (enable-theme 'vscode-dark-plus))
