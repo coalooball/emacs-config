@@ -74,10 +74,21 @@
 (add-hook 'server-after-make-frame-hook #'centaur-setup-fonts)
 
 ;; Ghostel
+(defun my/ghostel-enter-copy-mode ()
+  "Enter copy mode and materialize the complete Ghostel scrollback."
+  (unless (eq ghostel--input-mode 'copy)
+    (ghostel-copy-mode)
+    ;; Inline TUIs can leave the native scrollback ahead of the Emacs buffer.
+    (when ghostel--term
+      (let ((inhibit-read-only t)
+            (inhibit-modification-hooks t)
+            (gc-cons-threshold most-positive-fixnum))
+        (ghostel--redraw ghostel--term t t)))))
+
 (defun my/ghostel-scroll-backward ()
   "Enter copy mode and scroll backward in a Ghostel buffer."
   (interactive)
-  (ghostel-copy-mode)
+  (my/ghostel-enter-copy-mode)
   (scroll-down-command))
 
 (defun my/ghostel-freeze-before-wheel-scroll (event &rest _)
@@ -91,7 +102,7 @@
         (when (and (derived-mode-p 'ghostel-mode)
                    (eq ghostel--input-mode 'semi-char)
                    (not (ghostel-alt-screen-p)))
-          (ghostel-copy-mode))))))
+          (my/ghostel-enter-copy-mode))))))
 
 (with-eval-after-load 'ghostel
   (setq-default ghostel-glyph-scale-floor 1.0)
