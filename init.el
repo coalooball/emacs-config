@@ -317,7 +317,8 @@
   :custom
   (vterm-always-compile-module t)
   (vterm-max-scrollback 20000)
-  :hook (vterm-mode . cyan/vterm-enable-directory-tracking)
+  :hook ((vterm-mode . compilation-shell-minor-mode)
+         (vterm-mode . cyan/vterm-enable-directory-tracking))
   :bind (("C-c v" . cyan/vterm-project-popup)
          ([remap vterm] . cyan/vterm-project-popup))
   :config
@@ -336,6 +337,7 @@
                (with-current-buffer buffer
                  (derived-mode-p 'vterm-mode)))
       (with-current-buffer buffer
+        (compilation-shell-minor-mode 1)
         (cyan/vterm-enable-directory-tracking))
       (cond
        ((string-match-p "\\[codex\\]\\(?:<[0-9]+>\\)?$"
