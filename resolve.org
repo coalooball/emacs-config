@@ -1,0 +1,85 @@
+#+title: Emacs 问题解决记录
+#+startup: overview
+
+* Dired 打开目录时 Vertico 报错
+
+** 症状
+
+执行 ~M-x dired~ 后，Vertico 在显示目录候选时反复产生回溯。关键错误如下：
+
+#+begin_example
+Vertico detected an error:
+  vertico--debug((wrong-number-of-arguments (1 . 1) 3))
+  seconds-to-string(... expanded abbrev)
+  marginalia--time-relative(...)
+  marginalia--annotate-local-file("opt/")
+  marginalia-annotate-file("opt/")
+  vertico--affixate(...)
+#+end_example
+
+** 原因
+
+问题不在 Dired 或 Vertico，而是更新软件包时生成了错误的 Marginalia 字节码：
+
+- Emacs 30.2 内置的 ~seconds-to-string~ 只接受一个参数。
+- Marginalia 需要通过 Compat 调用支持额外参数的兼容实现。
+- Marginalia 源码使用的是正确的 ~compat-call~，但生成的 ~marginalia.elc~
+  错误地直接调用了 Emacs 内置函数，并传入三个参数。
+- 因此出现 ~wrong-number-of-arguments (1 . 1) 3~。
+
+这种情况可能发生在同一个 Emacs 会话中加载旧版 Compat 后再升级软件包。仅更新包不一定会重新生成正确的字节码。
+
+** 推荐修复
+
+在 Emacs 中执行：
+
+#+begin_example
+M-x package-recompile RET marginalia RET
+#+end_example
+
+然后完全退出并重新启动 Emacs。如果使用 Emacs daemon，需要同时重启 daemon，而不只是关闭当前 frame。
+
+重启后再次执行：
+
+#+begin_example
+M-x dired
+#+end_example
+
+目录候选应能正常显示，且不再出现 Vertico 回溯。
+
+** 不重启的处理方式
+
+重新编译后，可以尝试立即重新加载 Marginalia：
+
+#+begin_src emacs-lisp
+(progn
+  (package-recompile 'marginalia)
+  (load (locate-library "marginalia") nil 'nomessage))
+#+end_src
+
+如果问题仍然存在，应完全重启 Emacs。
+
+** 临时绕过
+
+暂时关闭 Marginalia 注解后，Dired 和 Vertico 仍可使用：
+
+#+begin_src emacs-lisp
+(marginalia-mode -1)
+#+end_src
+
+此方法只隐藏补全候选的附加信息，不修复错误的字节码。
+
+** 验证 Compat
+
+下面的表达式应返回 ~"1h"~，而不是产生参数数量错误：
+
+#+begin_src emacs-lisp
+(compat-call seconds-to-string 3600 'expanded 'abbrev)
+#+end_src
+
+如果重新编译 Marginalia 后仍然失败，可依次重新编译 Compat 和 Marginalia，重启后再测试：
+
+#+begin_example
+M-x package-recompile RET compat RET
+M-x package-recompile RET marginalia RET
+#+end_example
