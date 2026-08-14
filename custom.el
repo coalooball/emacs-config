@@ -167,11 +167,14 @@
   (my/codex-cycle-buffer -1))
 
 (defvar my/codex-ghostel-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-n") #'my/codex-next-buffer)
-    (define-key map (kbd "C-p") #'my/codex-previous-buffer)
-    map)
+  (make-sparse-keymap)
   "Keymap active in Codex Ghostel buffers.")
+
+;; Rebind explicitly so reloading `custom.el' updates existing Codex buffers.
+(define-key my/codex-ghostel-mode-map (kbd "C-n") nil)
+(define-key my/codex-ghostel-mode-map (kbd "C-p") nil)
+(define-key my/codex-ghostel-mode-map (kbd "M-n") #'my/codex-next-buffer)
+(define-key my/codex-ghostel-mode-map (kbd "M-p") #'my/codex-previous-buffer)
 
 (define-minor-mode my/codex-ghostel-mode
   "Minor mode for a Codex process running inside Ghostel."
@@ -179,42 +182,38 @@
   :keymap my/codex-ghostel-mode-map)
 
 (defun codex (directory)
-  "Run Codex in DIRECTORY inside Ghostel in the selected window."
+  "Run a new Codex process in DIRECTORY inside Ghostel.
+
+Each invocation creates a separate buffer and process.  When the default
+buffer name is already in use, Emacs adds a unique suffix such as `<2>'."
   (interactive
    (list (read-directory-name "Codex directory: " default-directory nil t)))
   (require 'ghostel)
   (let* ((directory (file-name-as-directory (expand-file-name directory)))
          (directory-name (file-name-nondirectory (directory-file-name directory)))
          (buffer-name (format "%s[codex]" directory-name))
-         (existing (get-buffer buffer-name))
          (program (executable-find "codex")))
     (when (file-remote-p directory)
       (user-error "Codex directory must be local"))
     (unless program
       (user-error "Cannot find the codex executable"))
-    (if existing
-        (if (and (buffer-local-value 'my/codex-ghostel-mode existing)
-                 (equal (buffer-local-value 'my/codex-directory existing)
-                        directory))
-            (my/codex-display-buffer existing)
-          (user-error "Buffer %s already exists for another purpose" buffer-name))
-      (let ((buffer (get-buffer-create buffer-name)))
-        (condition-case err
-            (progn
-              (with-current-buffer buffer
-                (setq default-directory directory)
-                (ghostel-mode)
-                (setq-local ghostel-buffer-name-function nil)
-                (setq-local my/codex-directory directory))
-              (my/codex-display-buffer buffer)
-              (ghostel-exec buffer program '("--no-alt-screen"))
-              (with-current-buffer buffer
-                (my/codex-ghostel-mode 1))
-              buffer)
-          ((error quit)
-           (when (buffer-live-p buffer)
-             (kill-buffer buffer))
-           (signal (car err) (cdr err))))))))
+    (let ((buffer (generate-new-buffer buffer-name)))
+      (condition-case err
+          (progn
+            (with-current-buffer buffer
+              (setq default-directory directory)
+              (ghostel-mode)
+              (setq-local ghostel-buffer-name-function nil)
+              (setq-local my/codex-directory directory))
+            (my/codex-display-buffer buffer)
+            (ghostel-exec buffer program '("--no-alt-screen"))
+            (with-current-buffer buffer
+              (my/codex-ghostel-mode 1))
+            buffer)
+        ((error quit)
+         (when (buffer-live-p buffer)
+           (kill-buffer buffer))
+         (signal (car err) (cdr err)))))))
 
 ;; Mail
 ;; (setq message-send-mail-function 'smtpmail-send-it
