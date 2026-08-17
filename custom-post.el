@@ -190,6 +190,104 @@
   :lighter " Codex"
   :keymap my/codex-ghostel-mode-map)
 
+;; Full-window Ghostel terminals
+(defun my/term-buffers ()
+  "Return live buffers created by `term', sorted by name."
+  (sort (seq-filter
+         (lambda (buffer)
+           (buffer-local-value 'my/term-ghostel-mode buffer))
+         (buffer-list))
+        (lambda (a b)
+          (string< (buffer-name a) (buffer-name b)))))
+
+(defun my/term-display-buffer (buffer &optional window)
+  "Display BUFFER in WINDOW, even when it is dedicated.
+WINDOW defaults to the selected window."
+  (let ((window (or window (selected-window))))
+    (when (window-dedicated-p window)
+      (set-window-dedicated-p window nil))
+    (set-window-buffer window buffer)
+    (select-window window)
+    buffer))
+
+(defun my/term-cycle-buffer (direction)
+  "Switch to another `term' buffer in DIRECTION, wrapping at the ends."
+  (let* ((buffers (my/term-buffers))
+         (count (length buffers))
+         (index (cl-position (current-buffer) buffers))
+         (target (cond
+                  ((zerop count) nil)
+                  ((null index) (if (> direction 0)
+                                    (car buffers)
+                                  (car (last buffers))))
+                  (t (nth (mod (+ index direction) count) buffers)))))
+    (cond
+     ((null target)
+      (user-error "No term buffers"))
+     ((and (= count 1) (eq target (current-buffer)))
+      (message "Only one term buffer"))
+     (t
+      (my/term-display-buffer target)))))
+
+(defun my/term-next-buffer ()
+  "Switch to the next buffer created by `term'."
+  (interactive)
+  (my/term-cycle-buffer 1))
+
+(defun my/term-previous-buffer ()
+  "Switch to the previous buffer created by `term'."
+  (interactive)
+  (my/term-cycle-buffer -1))
+
+(defvar my/term-ghostel-mode-map
+  (make-sparse-keymap)
+  "Keymap active in Ghostel buffers created by `term'.")
+
+(define-key my/term-ghostel-mode-map (kbd "M-n") #'my/term-next-buffer)
+(define-key my/term-ghostel-mode-map (kbd "M-p") #'my/term-previous-buffer)
+
+(define-minor-mode my/term-ghostel-mode
+  "Minor mode for full-window terminals running inside Ghostel."
+  :lighter " Term"
+  :keymap my/term-ghostel-mode-map)
+
+(defun my/term (directory)
+  "Start a new Ghostel terminal in DIRECTORY in the selected window."
+  (interactive
+   (list (read-directory-name "Term directory: " default-directory nil t)))
+  (require 'ghostel)
+  (let ((directory (file-name-as-directory (expand-file-name directory)))
+        (window (selected-window)))
+    (when (window-dedicated-p window)
+      (set-window-dedicated-p window nil))
+    (let ((default-directory directory)
+          (ghostel-buffer-name "*term*")
+          ;; Bypass Popper so Ghostel uses its same-window display action.
+          (popper-display-control nil))
+      (let ((buffer (ghostel t)))
+        (with-current-buffer buffer
+          (setq-local ghostel-buffer-name-function nil)
+          (setq-local popper-popup-status 'raised)
+          (my/term-ghostel-mode 1))
+        (my/term-display-buffer buffer window)
+        buffer))))
+
+;; Preserve this command if the built-in term.el library is loaded later.
+(defalias 'term #'my/term)
+(with-eval-after-load 'term
+  (defalias 'term #'my/term))
+
+(defun my/codex-executable ()
+  "Return the Codex executable, including installations under NVM."
+  (or (executable-find "codex")
+      (car (last
+            (sort
+             (seq-filter
+              #'file-executable-p
+              (file-expand-wildcards
+               (expand-file-name "~/.nvm/versions/node/v*/bin/codex")))
+             #'string<)))))
+
 (defun codex (directory)
   "Run a new Codex process in DIRECTORY inside Ghostel.
 
@@ -201,12 +299,19 @@ buffer name is already in use, Emacs adds a unique suffix such as `<2>'."
   (let* ((directory (file-name-as-directory (expand-file-name directory)))
          (directory-name (file-name-nondirectory (directory-file-name directory)))
          (buffer-name (format "%s[codex]" directory-name))
-         (program (executable-find "codex")))
+         (program (my/codex-executable)))
     (when (file-remote-p directory)
       (user-error "Codex directory must be local"))
     (unless program
       (user-error "Cannot find the codex executable"))
-    (let ((buffer (generate-new-buffer buffer-name)))
+    (let ((buffer (generate-new-buffer buffer-name))
+          (process-environment (copy-sequence process-environment)))
+      ;; The npm launcher uses `#!/usr/bin/env node', so make its NVM directory
+      ;; visible only to this Codex child process.
+      (setenv "PATH"
+              (concat (file-name-directory program)
+                      path-separator
+                      (or (getenv "PATH") "")))
       (condition-case err
           (progn
             (with-current-buffer buffer
