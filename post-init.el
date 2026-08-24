@@ -198,7 +198,12 @@
   ;; configuration is restored together with the project workspace.
   (tabspaces-project-switch-opens-workspace t)
   (tabspaces-session t)
-  (tabspaces-session-auto-restore t)
+  ;; Do not restore sessions automatically at startup.  A saved Ghostel
+  ;; window can respawn its PTY (and a Codex TUI) during startup; restoring
+  ;; several such buffers at once can saturate the Emacs event loop and make
+  ;; the NS frame appear frozen.  Sessions remain available through
+  ;; `M-x tabspaces-restore-session' when an explicit restore is wanted.
+  (tabspaces-session-auto-restore nil)
   ;; Keep session metadata out of project repositories.
   (tabspaces-session-project-session-store
    (expand-file-name "tabspaces-sessions/" user-emacs-directory))
@@ -326,6 +331,10 @@
   ;; Keep CJK fallback glyphs at their natural size instead of shrinking them
   ;; to Ghostel's strict terminal grid.
   (setq-default ghostel-glyph-scale-floor 1.0)
+  ;; Keep high-volume terminal output from materializing an oversized
+  ;; text-property buffer in Emacs.  Codex uses the alternate screen below,
+  ;; but this cap also protects regular Ghostel terminals.
+  (setq ghostel-max-scrollback (* 1 1024 1024))
   (with-eval-after-load 'project
     (add-to-list 'project-switch-commands
                  '(ghostel-project "Ghostel") t)
@@ -342,6 +351,38 @@
 
 (defvar-local my/codex-tab-name nil
   "Tabspace that owns the current Codex buffer.")
+
+(defun my/codex-disable-auto-composition ()
+  "Disable expensive text shaping and bidi scans in the current Codex buffer.
+
+Ghostel materializes the terminal screen as a large text-property buffer.
+On macOS, automatic CJK composition makes redisplay walk composition
+properties across that whole buffer after each IME edit; this becomes
+pathologically slow after `/resume' loads a long Codex transcript.  Ghostel's
+native renderer still displays the UTF-8 text when these Emacs redisplay
+features are disabled."
+  (when (fboundp 'auto-composition-mode)
+    (auto-composition-mode -1))
+  (setq-local auto-composition-mode nil
+              ;; `nil' is not a valid value here: M-x completion calls
+              ;; `find-automatic-composition' and Emacs can crash on it.
+              ;; An empty table disables automatic composition safely while
+              ;; retaining the normal global table everywhere else.
+              composition-function-table
+              (make-char-table 'composition-function-table))
+  ;; Codex is an LTR terminal UI.  Avoid rescanning the entire transcript for
+  ;; bidirectional paragraph resolution after each composed CJK character.
+  (setq-local bidi-display-reordering nil
+              bidi-paragraph-direction 'left-to-right)
+  ;; Remove properties already created before this setting took effect.
+  (remove-list-of-text-properties (point-min) (point-max) '(composition)))
+
+(defun my/codex-ghostel-performance-setup ()
+  "Apply Codex-only redisplay safeguards as soon as Ghostel starts."
+  (when (string-match-p "\\[codex\\]" (buffer-name))
+    (my/codex-disable-auto-composition)))
+
+(add-hook 'ghostel-mode-hook #'my/codex-ghostel-performance-setup)
 
 (defun my/codex-buffers ()
   "Return live Codex buffers from the current tabspace, sorted by name."
@@ -411,6 +452,13 @@
   :lighter " Codex"
   :keymap my/codex-ghostel-mode-map)
 
+;; Also repair an already-running Codex buffer when this file is re-evaluated.
+(dolist (buffer (buffer-list))
+  (when (and (buffer-live-p buffer)
+             (buffer-local-value 'my/codex-ghostel-mode buffer))
+    (with-current-buffer buffer
+      (my/codex-disable-auto-composition))))
+
 (defun my/codex-executable ()
   "Return the Codex executable, including installations under NVM."
   (or (executable-find "codex")
@@ -422,6 +470,16 @@
                (expand-file-name "~/.nvm/versions/node/v*/bin/codex")))
              #'string<)))))
 
+(defcustom my/codex-terminal-backend 'ghostel
+  "Terminal backend used by `codex'.
+
+The built-in `term' backend is the default because Ghostel materializes
+terminal cells as text properties; long Codex `/resume' transcripts can make
+macOS CJK composition and redisplay pathologically expensive there.  Set this
+to `ghostel' to opt back into the Ghostel renderer."
+  :type '(choice (const :tag "Built-in term" term)
+                 (const :tag "Ghostel" ghostel)))
+
 (defun codex (&optional directory)
   "Run a new Codex process in DIRECTORY inside Ghostel.
 
@@ -432,7 +490,8 @@ Each invocation creates a separate buffer and process.  When the default
 buffer name is already in use, Emacs adds a unique suffix such as `<2>'."
   (interactive
    (list nil))
-  (require 'ghostel)
+  (when (eq my/codex-terminal-backend 'ghostel)
+    (require 'ghostel))
   (let* ((tab-project-root (my/tabspaces-project-root))
          (directory (file-name-as-directory
                      (expand-file-name
@@ -470,15 +529,39 @@ buffer name is already in use, Emacs adds a unique suffix such as `<2>'."
           (progn
             (with-current-buffer buffer
               (setq default-directory directory)
-              (ghostel-mode)
-              (setq-local ghostel-buffer-name-function nil)
+              (if (eq my/codex-terminal-backend 'ghostel)
+                  (progn
+                    (ghostel-mode)
+                    (setq-local ghostel-buffer-name-function nil
+                                ghostel-max-scrollback (* 256 1024)))
+                (require 'term)
+                (term-mode)))
+            (with-current-buffer buffer
               (setq-local my/codex-directory directory)
               (setq-local my/codex-project-root
                           (or project-root tab-project-root))
               (setq-local my/codex-tab-name tab-name))
             (my/codex-display-buffer buffer)
-            (ghostel-exec buffer program '("--no-alt-screen"))
+            (if (eq my/codex-terminal-backend 'ghostel)
+                ;; Keep Codex on Ghostel's alternate screen.  `--no-alt-screen'
+                ;; makes Codex preserve every TUI repaint in terminal scrollback.
+                (ghostel-exec buffer program nil)
+              ;; `term' does not attach Ghostel's per-cell display properties,
+              ;; so CJK input is composed without rescanning the transcript.
+                (term-exec buffer (buffer-name buffer) program nil nil)
+              (term-char-mode))
             (with-current-buffer buffer
+              (when (eq my/codex-terminal-backend 'ghostel)
+                ;; Codex owns its transcript/history.  Do not mirror it into
+                ;; Ghostel's Emacs text buffer, where CJK redisplay becomes
+                ;; quadratic after `/resume'.
+                (setq-local ghostel-max-scrollback (* 256 1024)))
+              (my/codex-disable-auto-composition)
+              (when (eq my/codex-terminal-backend 'ghostel)
+                ;; Handle Quail/Emacs Lisp IME commits through Ghostel's
+                ;; composition-aware forwarding path when available.
+                (require 'ghostel-ime)
+                (ghostel-ime-mode 1))
               (my/codex-ghostel-mode 1))
             buffer)
         ((error quit)
