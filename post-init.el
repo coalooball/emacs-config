@@ -57,6 +57,32 @@
 
 (add-hook 'prog-mode-hook #'display-line-numbers-mode)
 
+(defun my-copy-file-path-and-line ()
+  "Copy the current file's absolute path and line number to the kill ring."
+  (interactive)
+  (unless buffer-file-name
+    (user-error "Current buffer is not visiting a file"))
+  (let ((location (format "%s:%d"
+                         (file-truename buffer-file-name)
+                         (line-number-at-pos))))
+    (kill-new location)
+    (message "%s" location)))
+
+(global-set-key (kbd "C-c c c") #'my-copy-file-path-and-line)
+
+(defun my-mark-string ()
+  "Mark the contents of the string at point, excluding its delimiters."
+  (interactive)
+  (let ((start (nth 8 (syntax-ppss))))
+    (unless start
+      (user-error "Point is not inside a string"))
+    (let ((end (scan-sexps start 1)))
+      (goto-char (1+ start))
+      (set-mark (1- end))
+      (activate-mark))))
+
+(global-set-key (kbd "C-c c i") #'my-mark-string)
+
 ;; GNU Emacs 30's macOS NS port can lose its event-loop wakeup while deleting
 ;; a native frame.  Keep workspace operations inside one native frame and
 ;; iconify any extra frames instead of deleting them.  Use Command-Q to exit.
@@ -117,6 +143,8 @@
 ;;; Projects
 
 (with-eval-after-load 'project
+  ;; Treat Git submodules as projects in their own right.
+  (setq project-vc-merge-submodules nil)
   ;; A .project file is an explicit fallback for projects without version
   ;; control.  The manifest files cover common language-specific projects.
   (setq project-vc-extra-root-markers
