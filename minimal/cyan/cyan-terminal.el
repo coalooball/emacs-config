@@ -8,6 +8,7 @@
 
 (require 'use-package)
 (require 'cyan-workspaces)
+(require 'cyan-ghostel-ns-ime)
 
 ;;; Terminal
 
