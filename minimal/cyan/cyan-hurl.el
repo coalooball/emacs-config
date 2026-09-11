@@ -16,7 +16,7 @@
   (when (buffer-modified-p)
     (save-buffer))
   (let ((default-directory (file-name-directory buffer-file-name)))
-    (compile (format "hurl %s"
+    (compile (format "hurl --no-color %s | perl -pe 's/\\e\\[[0-9;]*m//g' | jq -M ."
                     (shell-quote-argument (file-name-nondirectory
                                            buffer-file-name))))))
 

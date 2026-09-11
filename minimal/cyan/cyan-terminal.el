@@ -46,11 +46,13 @@
       (switch-to-buffer buffer))
     buffer))
 
-(defun my/ghostel ()
-  "Start a fresh Ghostel buffer for the current tabspace or chosen directory."
+(defun my/ghostel (&optional directory project-root)
+  "Start a fresh Ghostel buffer in DIRECTORY for the current tabspace.
+When DIRECTORY is nil, use the current tabspace project root or prompt for
+a directory."
   (interactive)
   (require 'ghostel)
-  (let* ((project-root (my/tabspaces-project-root))
+  (let* ((project-root (or project-root (my/tabspaces-project-root)))
          (directory (or project-root
                         (my/read-terminal-directory "Ghostel directory: ")))
          (buffer (if project-root
@@ -69,15 +71,46 @@
     (my/ghostel-display-buffer buffer)
     buffer))
 
+(defun my/ghostel-in-tabspace (&optional direction)
+  "Open a Ghostel terminal in the current tabspace.
+With DIRECTION `below' or `right', split the current window accordingly."
+  (interactive)
+  (when direction
+    ;; `split-window-*' leaves the original window selected.  Select the new
+    ;; window so the terminal is opened on the requested side of the split.
+    (select-window
+     (if (eq direction 'right)
+         (split-window-right)
+       (split-window-below))))
+  (let ((project-root (my/tabspaces-project-root)))
+    (if project-root
+        (my/ghostel project-root project-root)
+      (my/ghostel default-directory nil))))
+
+(defvar my/terminal-prefix-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "t") #'my/ghostel-in-tabspace)
+    (define-key map (kbd "u") (lambda ()
+                                (interactive)
+                                (my/ghostel-in-tabspace 'below)))
+    (define-key map (kbd "r") (lambda ()
+                                (interactive)
+                                (my/ghostel-in-tabspace 'right)))
+    map)
+  "Prefix map for tabspace Ghostel terminals.")
+
+;; Bind the actual keymap here.  Passing its symbol to `use-package :bind'
+;; makes use-package treat it as a command and autoload it from Ghostel.
+(define-key global-map (kbd "C-c t") my/terminal-prefix-map)
+
 (use-package ghostel
   :commands (my/ghostel
              ghostel
              ghostel-project
              ghostel-project-list-buffers)
-  :bind (("C-c t" . my/ghostel)
-         :map project-prefix-map
-         ("m" . ghostel-project)
-         ("M" . ghostel-project-list-buffers))
+  :bind (:map project-prefix-map
+              ("m" . ghostel-project)
+              ("M" . ghostel-project-list-buffers))
   :init
   ;; Keep CJK fallback glyphs at their natural size instead of shrinking them
   ;; to Ghostel's strict terminal grid.
